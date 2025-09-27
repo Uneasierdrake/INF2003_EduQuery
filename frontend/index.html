@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduQuery SG</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>EduQuery SG</h1>
+    <p>Explore schools, subjects, CCAs, and programmes in Singapore</p>
+  </header>
+
+  <main>
+    <section class="controls">
+      <input type="text" id="searchBox" placeholder="Enter school name...">
+      <select id="queryType">
+        <option value="all">General Info</option>
+        <option value="subjects">Subjects</option>
+        <option value="ccas">CCAs</option>
+        <option value="programmes">Programmes</option>
+        <option value="distinctives">Distinctives</option>
+      </select>
+      <button onclick="runQuery()">Search</button>
+    </section>
+
+    <section id="results">
+      <h2>Results</h2>
+      <div id="resultsTable"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>INF2003 Project Built with using Supabase + MongoDB Atlas</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
