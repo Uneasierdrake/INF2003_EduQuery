@@ -54,7 +54,7 @@ EduQuery is a full-stack database management system that demonstrates:
 | Layer | Technology |
 |-------|-----------|
 | **Frontend** | HTML5, CSS3, Vanilla JavaScript |
-| **Backend** | Node.js, Express.js |
+| **Backend** | Node.js, Express.js | 
 | **Relational DB** | PostgreSQL (Supabase) |
 | **NoSQL DB** | MongoDB Atlas |
 | **API** | RESTful with JSON responses |
@@ -219,7 +219,9 @@ INF2003_EduQuery/
 │   └── package.json           # Dependencies
 │
 ├── frontend/
+│   ├── login.html             # login UI
 │   ├── index.html             # Main UI
+│   ├── login.html             # login logic  
 │   ├── script.js              # Client-side logic
 │   └── style.css              # Responsive styling
 │
