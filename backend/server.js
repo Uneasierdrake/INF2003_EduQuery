@@ -54,11 +54,10 @@ app.get('/api/schools', async (req, res) => {
                LIMIT 50`;
       params = [`%${name}%`];
     } else {
-      // Get all schools
+      // Get all schools 
       query = `SELECT school_id, school_name, address, postal_code, zone_code, mainlevel_code, principal_name
                FROM Schools
-               ORDER BY school_name ASC
-               LIMIT 100`;
+               ORDER BY school_name ASC`;
       params = [];
     }
     
