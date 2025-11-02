@@ -27,8 +27,40 @@ window.switchView = function(viewName) {
     targetBtn.classList.add('active');
   }
   
+  // Load stats when switching to manage view
   if (viewName === 'manage') {
     loadSchoolStats();
+  }
+  
+  if (viewName === 'map') {
+    // Wait for view transition to complete before initializing map
+    setTimeout(() => {
+      if (!window.mapInitialized) {
+        // Check if map container is visible
+        const mapView = document.getElementById('mapView');
+        if (mapView && mapView.classList.contains('active')) {
+          if (typeof initializeMap === 'function') {
+            try {
+              initializeMap();
+              loadSchoolsMap();
+              window.mapInitialized = true;
+            } catch (error) {
+              console.error('Map initialization error:', error);
+              window.mapInitialized = false;
+            }
+          }
+        }
+      } else {
+        // If map already exists, just invalidate size to ensure proper rendering
+        if (window.map) {
+          try {
+            map.invalidateSize();
+          } catch (error) {
+            console.error('Map resize error:', error);
+          }
+        }
+      }
+    }, 300);
   }
 };
 
@@ -56,6 +88,9 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+  
+  // Load school statistics on page load
+  loadSchoolStats();
 });
 
 // ========== Search Functionality ==========

@@ -5,6 +5,8 @@ let markerLayer = null;
 let schools = [];
 let geocodeCache = {};
 let currentZoneFilter = 'all';
+let schoolMarkerMap = new Map(); // Map school_id to marker for quick lookup
+let searchTimeout = null;
 
 // Singapore bounds
 const SINGAPORE_BOUNDS = {
@@ -28,6 +30,21 @@ const ZONE_COLORS = {
 
 // ========== Initialize Map ==========
 function initializeMap() {
+  // Prevent double initialization
+  if (map !== null) {
+    console.log('Map already initialized, skipping...');
+    return;
+  }
+  
+  console.log('Initializing map...');
+  
+  // Check if map container exists and is visible
+  const mapContainer = document.getElementById('map');
+  if (!mapContainer) {
+    console.error('Map container not found!');
+    return;
+  }
+  
   // Create map instance
   map = L.map('map', {
     center: SINGAPORE_CENTER,
@@ -50,7 +67,210 @@ function initializeMap() {
 
   // Set initial view
   map.setView(SINGAPORE_CENTER, 11);
+  
+  console.log('Map initialized successfully');
 }
+
+// ========== Search Functionality ==========
+function searchSchoolsOnMap(event) {
+  const searchBox = document.getElementById('mapSearchBox');
+  const searchQuery = searchBox.value.trim().toLowerCase();
+  const searchResults = document.getElementById('searchResults');
+  const clearBtn = document.getElementById('clearSearchBtn');
+  
+  // Show/hide clear button
+  clearBtn.style.display = searchQuery ? 'flex' : 'none';
+  
+  // Clear previous timeout
+  if (searchTimeout) {
+    clearTimeout(searchTimeout);
+  }
+  
+  // If search is empty, clear results and reset markers
+  if (!searchQuery) {
+    searchResults.innerHTML = '';
+    searchResults.style.display = 'none';
+    resetMarkerSizes();
+    return;
+  }
+  
+  // Debounce search
+  searchTimeout = setTimeout(() => {
+    performSearch(searchQuery, searchResults);
+  }, 300);
+  
+  // Allow Enter key to select first result
+  if (event.key === 'Enter' && searchQuery) {
+    // Clear the timeout since we're executing immediately
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    // Find matching schools
+    const filteredSchools = schools.filter(school => 
+      school.school_name.toLowerCase().includes(searchQuery)
+    );
+    
+    // Select the first school if found
+    if (filteredSchools.length > 0) {
+      selectSchoolFromSearch(filteredSchools[0]);
+    }
+  }
+}
+
+function performSearch(query, resultsContainer) {
+  // Filter schools by name (search in ALL schools, not just mapped ones)
+  const filteredSchools = schools.filter(school => 
+    school.school_name.toLowerCase().includes(query)
+  );
+  
+  if (filteredSchools.length === 0) {
+    resultsContainer.innerHTML = '<div class="search-result-item no-results">No schools found</div>';
+    resultsContainer.style.display = 'block';
+    resetMarkerSizes();
+    return;
+  }
+  
+  // Display search results
+  let html = '';
+  filteredSchools.forEach((school, index) => {
+    const hasMarker = schoolMarkerMap.has(school.school_id);
+    const statusIcon = hasMarker 
+      ? '<span style="color: #10B981;">📍</span>' 
+      : '<span style="color: #EF4444;">⚠️</span>';
+    
+    // Pass the full school object as JSON, properly escaped
+    const schoolJson = JSON.stringify(school).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    
+    html += `
+      <div class="search-result-item ${!hasMarker ? 'not-mapped' : ''}" onclick='selectSchoolFromSearch(${schoolJson})'>
+        <div class="result-name">${statusIcon} ${highlightMatch(school.school_name, query)}</div>
+        <div class="result-details">${school.zone_code} • ${school.mainlevel_code}${!hasMarker ? ' • Not on map' : ''}</div>
+      </div>
+    `;
+  });
+  
+  resultsContainer.innerHTML = html;
+  resultsContainer.style.display = 'block';
+  
+  // Highlight matching markers (only those that exist on map)
+  const mappedSchools = filteredSchools.filter(s => schoolMarkerMap.has(s.school_id));
+  highlightMatchingMarkers(mappedSchools);
+}
+
+// New function to handle school selection from search results
+function selectSchoolFromSearch(school) {
+  // Fill the search box with the full school name
+  const searchBox = document.getElementById('mapSearchBox');
+  searchBox.value = school.school_name;
+  
+  // Zoom to the school on the map
+  zoomToSchool(school.school_id, school.school_name);
+  
+  // Hide the search results dropdown
+  document.getElementById('searchResults').style.display = 'none';
+}
+
+function highlightMatch(text, query) {
+  const regex = new RegExp(`(${query})`, 'gi');
+  return text.replace(regex, '<strong>$1</strong>');
+}
+
+function highlightMatchingMarkers(matchedSchools) {
+  // Reset all markers to normal size
+  resetMarkerSizes();
+  
+  // Highlight matched markers
+  matchedSchools.forEach(school => {
+    const marker = schoolMarkerMap.get(school.school_id);
+    if (marker) {
+      const icon = marker.getElement();
+      if (icon) {
+        icon.style.transform = 'scale(1.3)';
+        icon.style.zIndex = '1000';
+        icon.style.filter = 'drop-shadow(0 0 8px rgba(0,0,0,0.5))';
+      }
+    }
+  });
+}
+
+function resetMarkerSizes() {
+  schoolMarkerMap.forEach(marker => {
+    const icon = marker.getElement();
+    if (icon) {
+      icon.style.transform = 'scale(1)';
+      icon.style.zIndex = '400';
+      icon.style.filter = 'none';
+    }
+  });
+}
+
+function zoomToSchool(schoolId, schoolName) {
+  const marker = schoolMarkerMap.get(schoolId);
+  
+  if (marker) {
+    // Zoom to marker
+    map.setView(marker.getLatLng(), 16, {
+      animate: true,
+      duration: 0.5
+    });
+    
+    // Open popup
+    setTimeout(() => {
+      marker.openPopup();
+    }, 500);
+    
+    // Highlight this marker
+    resetMarkerSizes();
+    const icon = marker.getElement();
+    if (icon) {
+      icon.style.transform = 'scale(1.5)';
+      icon.style.zIndex = '1000';
+      icon.style.filter = 'drop-shadow(0 0 12px rgba(0,0,0,0.6))';
+    }
+    
+    showToast(`Found ${schoolName}`, 'success');
+  } else {
+    // School exists but not on map - find it in schools array and show info
+    const school = schools.find(s => s.school_id === schoolId);
+    if (school) {
+      const message = `${schoolName} is in the database but location could not be mapped.\n\nPostal Code: ${school.postal_code}\nAddress: ${school.address}`;
+      showToast(`Location unavailable - check console for details`, 'warning');
+      console.log('School Info:', school);
+      console.log('This school could not be geocoded. Postal code:', school.postal_code);
+    } else {
+      showToast(`School not found in database`, 'error');
+    }
+  }
+  
+  // Clear search results after selection
+  document.getElementById('searchResults').style.display = 'none';
+}
+
+function clearMapSearch() {
+  const searchBox = document.getElementById('mapSearchBox');
+  const searchResults = document.getElementById('searchResults');
+  const clearBtn = document.getElementById('clearSearchBtn');
+  
+  searchBox.value = '';
+  searchResults.innerHTML = '';
+  searchResults.style.display = 'none';
+  clearBtn.style.display = 'none';
+  resetMarkerSizes();
+  searchBox.focus();
+}
+
+// Close search results when clicking outside
+document.addEventListener('click', function(event) {
+  const searchResults = document.getElementById('searchResults');
+  const searchBox = document.getElementById('mapSearchBox');
+  
+  if (searchResults && searchBox && 
+      !searchResults.contains(event.target) && 
+      !searchBox.contains(event.target)) {
+    searchResults.style.display = 'none';
+  }
+});
 
 // ========== Load Schools from Database ==========
 async function loadSchoolsMap() {
@@ -141,8 +361,16 @@ async function displaySchools(schoolsToDisplay) {
   }
   
   // Show summary
+  console.log(`Geocoding summary: ${mappedCount} mapped, ${failedCount} failed`);
+  
   if (failedCount > 0) {
-    showToast(`Mapped ${mappedCount} schools, ${failedCount} failed`, 'warning');
+    console.log('Schools that failed to geocode:');
+    schoolsToDisplay.forEach(school => {
+      if (!schoolMarkerMap.has(school.school_id)) {
+        console.log(`- ${school.school_name} (${school.postal_code})`);
+      }
+    });
+    showToast(`Mapped ${mappedCount} schools, ${failedCount} failed to geocode`, 'warning');
   } else {
     showToast(`Successfully mapped ${mappedCount} schools`, 'success');
   }
@@ -340,6 +568,7 @@ function addSchoolMarker(school, coords) {
       justify-content: center;
       border: 3px solid white;
       box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      transition: all 0.3s ease;
     ">
       <svg width="16" height="16" viewBox="0 0 20 20" fill="white">
         <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
@@ -373,6 +602,9 @@ function addSchoolMarker(school, coords) {
   markerLayer.addLayer(marker);
   markers.push(marker);
   
+  // Store marker for quick lookup
+  schoolMarkerMap.set(school.school_id, marker);
+  
   return marker;
 }
 
@@ -382,6 +614,7 @@ function clearMarkers() {
     markerLayer.clearLayers();
   }
   markers = [];
+  schoolMarkerMap.clear();
 }
 
 // ========== Fit Map to Show All Markers ==========
@@ -407,6 +640,9 @@ function resetMapView() {
   
   // Update zone display
   document.getElementById('selectedZone').textContent = 'All';
+  
+  // Clear search
+  clearMapSearch();
   
   // Reload schools
   if (schools.length > 0) {
@@ -456,6 +692,8 @@ function showToast(message, type = 'info') {
 function showMapHelp() {
   alert(
     'School Map Help\n\n' +
+    '• Search for schools by name using the search box\n' +
+    '• Click on search results to zoom to the school\n' +
     '• Click on any marker to see school details\n' +
     '• Use zone filters to show specific zones\n' +
     '• Markers are color-coded by zone\n' +
@@ -468,15 +706,9 @@ function showMapHelp() {
 
 // ========== Initialize on Page Load ==========
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('Initializing school map...');
+  console.log('Map module loaded and ready');
   
-  // Initialize map
-  initializeMap();
-  
-  // Load schools automatically
-  loadSchoolsMap();
-  
-  // Setup zone filter chips
+  // Setup zone filter chips (but don't initialize map yet)
   document.querySelectorAll('.chip').forEach(chip => {
     chip.addEventListener('click', function() {
       // Update active state
@@ -488,5 +720,5 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
   
-  console.log('Map initialization complete');
+  console.log('Map event listeners attached - waiting for map view activation');
 });
