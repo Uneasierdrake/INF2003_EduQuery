@@ -1,0 +1,80 @@
+/* ========== Advanced Search Link ========== */
+.btn-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.5em 1em;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--primary);
+  font-size: 0.875em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-link:hover {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+}
+
+/* ========== Advanced Search Modal ========== */
+.modal-large {
+  max-width: 56.25em;
+}
+
+.advanced-search-body {
+  padding: 1.5em;
+  max-height: calc(90vh - 11.25em);
+  overflow-y: auto;
+}
+
+.search-section-group {
+  margin-bottom: 2em;
+  padding-bottom: 1.5em;
+  border-bottom: 0.125em solid var(--gray-100);
+}
+
+.search-section-group:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.search-section-title {
+  font-size: 1em;
+  font-weight: 700;
+  color: var(--gray-900);
+  margin-bottom: 1em;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.search-section-title::before {
+  content: "";
+  width: 0.25em;
+  height: 1.25em;
+  background: var(--primary);
+  border-radius: 0.125em;
+}
+
+/* Custom scrollbar for advanced search */
+.advanced-search-body::-webkit-scrollbar {
+  width: 0.5em;
+}
+
+.advanced-search-body::-webkit-scrollbar-track {
+  background: var(--gray-100);
+  border-radius: 0.25em;
+}
+
+.advanced-search-body::-webkit-scrollbar-thumb {
+  background: var(--gray-400);
+  border-radius: 0.25em;
+}
+
+.advanced-search-body::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-500);
+}
