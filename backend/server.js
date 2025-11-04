@@ -903,6 +903,207 @@ app.get('/api/analytics/popular', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// ========== ADVANCED SEARCH ENDPOINT (CORRECTED) ==========
+app.post('/api/search/advanced', async (req, res) => {
+  try {
+    const searchParams = req.body;
+    
+    // Check if at least one parameter is provided
+    if (Object.keys(searchParams).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one search parameter is required'
+      });
+    }
+
+    // Build dynamic query based on provided parameters
+    let whereClauses = [];
+    let queryParams = [];
+    let paramCount = 1;
+
+    // School Information - ONLY FIELDS THAT EXIST IN YOUR SCHEMA
+    if (searchParams.school_name) {
+      whereClauses.push(`LOWER(s.school_name) LIKE LOWER($${paramCount})`);
+      queryParams.push(`%${searchParams.school_name}%`);
+      paramCount++;
+    }
+
+    if (searchParams.principal_name) {
+      whereClauses.push(`LOWER(s.principal_name) LIKE LOWER($${paramCount})`);
+      queryParams.push(`%${searchParams.principal_name}%`);
+      paramCount++;
+    }
+
+    if (searchParams.address) {
+      whereClauses.push(`LOWER(s.address) LIKE LOWER($${paramCount})`);
+      queryParams.push(`%${searchParams.address}%`);
+      paramCount++;
+    }
+
+    if (searchParams.postal_code) {
+      whereClauses.push(`s.postal_code = $${paramCount}`);
+      queryParams.push(searchParams.postal_code);
+      paramCount++;
+    }
+
+    // School Classification
+    if (searchParams.zone_code) {
+      whereClauses.push(`s.zone_code = $${paramCount}`);
+      queryParams.push(searchParams.zone_code);
+      paramCount++;
+    }
+
+    if (searchParams.mainlevel_code) {
+      whereClauses.push(`s.mainlevel_code = $${paramCount}`);
+      queryParams.push(searchParams.mainlevel_code);
+      paramCount++;
+    }
+
+    // Build the base query - ONLY SELECT COLUMNS THAT EXIST
+    let query = `
+      SELECT DISTINCT
+        s.school_id,
+        s.school_name,
+        s.address,
+        s.postal_code,
+        s.zone_code,
+        s.mainlevel_code,
+        s.principal_name
+      FROM Schools s
+    `;
+
+    // Add joins if needed for related tables
+    let needsSubjectJoin = false;
+    let needsCCAJoin = false;
+    let needsProgrammeJoin = false;
+    let needsDistinctiveJoin = false;
+
+    // Check if we need to search in related tables
+    if (searchParams.subject_desc) {
+      needsSubjectJoin = true;
+      whereClauses.push(`LOWER(subj.subject_desc) LIKE LOWER($${paramCount})`);
+      queryParams.push(`%${searchParams.subject_desc}%`);
+      paramCount++;
+    }
+
+    if (searchParams.cca_generic_name) {
+      needsCCAJoin = true;
+      whereClauses.push(`LOWER(c.cca_generic_name) LIKE LOWER($${paramCount})`);
+      queryParams.push(`%${searchParams.cca_generic_name}%`);
+      paramCount++;
+    }
+
+    if (searchParams.cca_customized_name) {
+      needsCCAJoin = true;
+      whereClauses.push(`LOWER(sc.cca_customized_name) LIKE LOWER($${paramCount})`);
+      queryParams.push(`%${searchParams.cca_customized_name}%`);
+      paramCount++;
+    }
+
+    if (searchParams.moe_programme_desc) {
+      needsProgrammeJoin = true;
+      whereClauses.push(`LOWER(p.moe_programme_desc) LIKE LOWER($${paramCount})`);
+      queryParams.push(`%${searchParams.moe_programme_desc}%`);
+      paramCount++;
+    }
+
+    if (searchParams.alp_domain) {
+      needsDistinctiveJoin = true;
+      whereClauses.push(`LOWER(d.alp_domain) LIKE LOWER($${paramCount})`);
+      queryParams.push(`%${searchParams.alp_domain}%`);
+      paramCount++;
+    }
+    
+    if (searchParams.alp_title) {
+      needsDistinctiveJoin = true;
+      whereClauses.push(`LOWER(d.alp_title) LIKE LOWER($${paramCount})`);
+      queryParams.push(`%${searchParams.alp_title}%`);
+      paramCount++;
+    }
+    
+    if (searchParams.llp_domain1) {
+      needsDistinctiveJoin = true;
+      whereClauses.push(`LOWER(d.llp_domain1) LIKE LOWER($${paramCount})`);
+      queryParams.push(`%${searchParams.llp_domain1}%`);
+      paramCount++;
+    }
+    
+    if (searchParams.llp_title) {
+      needsDistinctiveJoin = true;
+      whereClauses.push(`LOWER(d.llp_title) LIKE LOWER($${paramCount})`);
+      queryParams.push(`%${searchParams.llp_title}%`);
+      paramCount++;
+    }
+
+    // Add necessary JOINs
+    if (needsSubjectJoin) {
+      query += `
+        LEFT JOIN School_Subjects ss ON s.school_id = ss.school_id
+        LEFT JOIN Subjects subj ON ss.subject_id = subj.subject_id
+      `;
+    }
+
+    if (needsCCAJoin) {
+      query += `
+        LEFT JOIN School_CCAs sc ON s.school_id = sc.school_id
+        LEFT JOIN CCAs c ON sc.cca_id = c.cca_id
+      `;
+    }
+
+    if (needsProgrammeJoin) {
+      query += `
+        LEFT JOIN School_Programmes sp ON s.school_id = sp.school_id
+        LEFT JOIN Programmes p ON sp.programme_id = p.programme_id
+      `;
+    }
+
+    if (needsDistinctiveJoin) {
+      query += `
+        LEFT JOIN School_Distinctives sd ON s.school_id = sd.school_id
+        LEFT JOIN Distinctive_Programmes d ON sd.distinctive_id = d.distinctive_id
+      `;
+    }
+
+    // Add WHERE clause
+    if (whereClauses.length > 0) {
+      query += ` WHERE ${whereClauses.join(' AND ')}`;
+    }
+
+    // Add ORDER BY and LIMIT
+    query += `
+      ORDER BY s.school_name ASC
+      LIMIT 100
+    `;
+
+    console.log('Advanced Search Query:', query);
+    console.log('Parameters:', queryParams);
+
+    const result = await pool.query(query, queryParams);
+
+    // Log to MongoDB
+    await logActivity('advanced_search', {
+      criteria_count: Object.keys(searchParams).length,
+      criteria: searchParams,
+      results_count: result.rows.length
+    });
+
+    res.json({
+      success: true,
+      results: result.rows,
+      count: result.rows.length,
+      criteria: searchParams
+    });
+
+  } catch (err) {
+    console.error('Advanced search error:', err);
+    console.error('Error stack:', err.stack);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      details: err.stack
+    });
+  }
+});
 
 // ========== ERROR HANDLING ==========
 

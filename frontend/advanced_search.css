@@ -24,6 +24,20 @@
   max-width: 56.25em;
 }
 
+.badge {
+  display: inline-block;
+  padding: 0.25em 0.6em;
+  font-size: 0.75em;
+  font-weight: 600;
+  line-height: 1;
+  color: #fff;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: baseline;
+  border-radius: 0.25em;
+  background-color: var(--primary);
+}
+
 .advanced-search-body {
   padding: 1.5em;
   max-height: calc(90vh - 11.25em);

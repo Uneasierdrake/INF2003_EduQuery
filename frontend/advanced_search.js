@@ -74,60 +74,119 @@ function runAdvancedQuery(event) {
   document.getElementById('loadingSpinner').style.display = 'flex';
   document.getElementById('resultsTable').innerHTML = '';
   
-  // TODO: Implement the actual API call to backend
-  // This is a placeholder - you'll need to connect to your backend API
-  
-  // Example: Make API call to your backend
-  // fetch('/api/advanced-search', {
-  //   method: 'POST',
-  //   headers: {
-  //     'Content-Type': 'application/json',
-  //   },
-  //   body: JSON.stringify(searchParams)
-  // })
-  // .then(response => response.json())
-  // .then(data => {
-  //   displayResults(data);
-  // })
-  // .catch(error => {
-  //   console.error('Error:', error);
-  //   showToast('Search failed. Please try again.', 'error');
-  // });
-  
-  // Placeholder response handling
-  setTimeout(() => {
+  // Make API call to backend
+  fetch('/api/search/advanced', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(searchParams)
+  })
+  .then(response => {
+    console.log('Response status:', response.status);
+    return response.json();
+  })
+  .then(data => {
+    console.log('Response data:', data);
     document.getElementById('loadingSpinner').style.display = 'none';
     
-    // Placeholder message
+    if (data.success && data.results && data.results.length > 0) {
+      displayAdvancedSearchResults(data.results, data.criteria);
+      document.getElementById('resultsMeta').textContent = 
+        `Found ${data.count} school(s) matching ${Object.keys(data.criteria).length} criteria`;
+      showToast(`Found ${data.count} matching school(s)`, 'success');
+    } else {
+      document.getElementById('resultsTable').innerHTML = `
+        <div class="empty-state">
+          <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+            <circle cx="32" cy="32" r="30" stroke="#E5E7EB" stroke-width="4"/>
+            <path d="M32 20v24M20 32h24" stroke="#E5E7EB" stroke-width="4" stroke-linecap="round"/>
+          </svg>
+          <h3>No results found</h3>
+          <p>Try adjusting your search criteria</p>
+        </div>
+      `;
+      document.getElementById('resultsMeta').textContent = 
+        `No results found with ${Object.keys(searchParams).length} criteria`;
+      showToast('No schools found matching your criteria', 'error');
+    }
+  })
+  .catch(error => {
+    console.error('Fetch Error:', error);
+    document.getElementById('loadingSpinner').style.display = 'none';
     document.getElementById('resultsTable').innerHTML = `
       <div class="empty-state">
         <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
-          <circle cx="32" cy="32" r="30" stroke="#3B82F6" stroke-width="4"/>
-          <path d="M32 20v24M20 32h24" stroke="#3B82F6" stroke-width="4" stroke-linecap="round"/>
+          <circle cx="32" cy="32" r="30" stroke="#DC2626" stroke-width="4"/>
+          <path d="M32 20v24M20 32h24" stroke="#DC2626" stroke-width="4" stroke-linecap="round"/>
         </svg>
-        <h3>Advanced Search Executed</h3>
-        <p>Searching with ${Object.keys(searchParams).length} criteria</p>
-        <p style="margin-top: 12px; font-size: 14px; color: var(--gray-600);">
-          Connect this to your backend API to see results
-        </p>
+        <h3>Search Error</h3>
+        <p>${error.message || 'Failed to perform search. Please try again.'}</p>
       </div>
     `;
+    showToast('Search failed. Please try again.', 'error');
+  });
+}
+
+// Function to display advanced search results
+function displayAdvancedSearchResults(results, criteria) {
+  const criteriaList = Object.entries(criteria)
+    .map(([key, value]) => `${key.replace(/_/g, ' ')}: ${value}`)
+    .join(', ');
+  
+  let html = `
+    <div style="margin-bottom: 1em; padding: 0.75em; background: #EFF6FF; border-left: 0.25em solid #3B82F6; border-radius: 0.25em;">
+      <strong>Search Criteria:</strong> ${criteriaList}
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>School Name</th>
+          <th>Address</th>
+          <th>Zone</th>
+          <th>Level</th>
+          <th>Principal</th>
+          <th>Indicators</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+  
+  results.forEach(school => {
+    const indicators = [];
+    if (school.autonomous_ind === 'Yes') indicators.push('Autonomous');
+    if (school.gifted_ind === 'Yes') indicators.push('Gifted');
+    if (school.ip_ind === 'Yes') indicators.push('IP');
+    if (school.sap_ind === 'Yes') indicators.push('SAP');
     
-    document.getElementById('resultsMeta').textContent = 
-      `Searched with ${Object.keys(searchParams).length} filters`;
-    
-    showToast('Advanced search executed successfully', 'success');
-  }, 1000);
+    html += `
+      <tr>
+        <td><strong>${school.school_name}</strong></td>
+        <td>${school.address || 'N/A'}</td>
+        <td><span class="badge">${school.zone_code || 'N/A'}</span></td>
+        <td>${school.mainlevel_code || 'N/A'}</td>
+        <td>${school.principal_name || 'N/A'}</td>
+        <td>${indicators.length > 0 ? indicators.join(', ') : '-'}</td>
+      </tr>
+    `;
+  });
+  
+  html += `
+      </tbody>
+    </table>
+  `;
+  
+  document.getElementById('resultsTable').innerHTML = html;
 }
 
 // Helper function to show toast notifications
 function showToast(message, type = 'success') {
   const toast = document.getElementById('toast');
   const toastMessage = document.getElementById('toastMessage');
-  
+
   toastMessage.textContent = message;
   toast.className = 'toast show ' + type;
-  
+
   setTimeout(() => {
     toast.classList.remove('show');
   }, 3000);
