@@ -903,12 +903,12 @@ app.get('/api/analytics/popular', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// ========== ADVANCED SEARCH ENDPOINT (CORRECTED) ==========
+
+// ========== ADVANCED SEARCH ENDPOINT ==========
 app.post('/api/search/advanced', async (req, res) => {
   try {
     const searchParams = req.body;
     
-    // Check if at least one parameter is provided
     if (Object.keys(searchParams).length === 0) {
       return res.status(400).json({
         success: false,
@@ -916,126 +916,315 @@ app.post('/api/search/advanced', async (req, res) => {
       });
     }
 
-    // Build dynamic query based on provided parameters
     let whereClauses = [];
     let queryParams = [];
     let paramCount = 1;
 
-    // School Information - ONLY FIELDS THAT EXIST IN YOUR SCHEMA
-    if (searchParams.school_name) {
-      whereClauses.push(`LOWER(s.school_name) LIKE LOWER($${paramCount})`);
-      queryParams.push(`%${searchParams.school_name}%`);
+    // Helper function to create sanitized search condition
+    const addSanitizedCondition = (column, searchValue, useExactMatch = false) => {
+      if (useExactMatch) {
+        whereClauses.push(`
+          ${column} = $${paramCount} 
+          AND ${column} IS NOT NULL 
+          AND TRIM(${column}) != '' 
+          AND UPPER(${column}) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-')
+        `);
+        queryParams.push(searchValue);
+      } else {
+        whereClauses.push(`
+          LOWER(${column}) LIKE LOWER($${paramCount}) 
+          AND ${column} IS NOT NULL 
+          AND TRIM(${column}) != '' 
+          AND UPPER(${column}) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-')
+        `);
+        queryParams.push(`%${searchValue}%`);
+      }
       paramCount++;
+    };
+
+    // Helper for multiple column OR conditions (like VPs or mother tongue)
+    const addMultiColumnCondition = (columns, searchValue) => {
+      const conditions = columns.map(col => `
+        (LOWER(${col}) LIKE LOWER($${paramCount}) 
+        AND ${col} IS NOT NULL 
+        AND TRIM(${col}) != '' 
+        AND UPPER(${col}) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-'))
+      `).join(' OR ');
+      
+      whereClauses.push(`(${conditions})`);
+      queryParams.push(`%${searchValue}%`);
+      paramCount++;
+    };
+
+    // ===== SCHOOLS TABLE FIELDS =====
+    if (searchParams.school_name) {
+      addSanitizedCondition('s.school_name', searchParams.school_name);
     }
 
     if (searchParams.principal_name) {
-      whereClauses.push(`LOWER(s.principal_name) LIKE LOWER($${paramCount})`);
+      whereClauses.push(`
+        (LOWER(COALESCE(s.principal_name, r.principal_name)) LIKE LOWER($${paramCount})
+        AND COALESCE(s.principal_name, r.principal_name) IS NOT NULL
+        AND TRIM(COALESCE(s.principal_name, r.principal_name)) != ''
+        AND UPPER(COALESCE(s.principal_name, r.principal_name)) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-'))
+      `);
       queryParams.push(`%${searchParams.principal_name}%`);
       paramCount++;
     }
 
     if (searchParams.address) {
-      whereClauses.push(`LOWER(s.address) LIKE LOWER($${paramCount})`);
+      whereClauses.push(`
+        (LOWER(COALESCE(s.address, r.address)) LIKE LOWER($${paramCount})
+        AND COALESCE(s.address, r.address) IS NOT NULL
+        AND TRIM(COALESCE(s.address, r.address)) != ''
+        AND UPPER(COALESCE(s.address, r.address)) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-'))
+      `);
       queryParams.push(`%${searchParams.address}%`);
       paramCount++;
     }
 
     if (searchParams.postal_code) {
-      whereClauses.push(`s.postal_code = $${paramCount}`);
+      whereClauses.push(`
+        COALESCE(s.postal_code, r.postal_code) = $${paramCount}
+        AND COALESCE(s.postal_code, r.postal_code) IS NOT NULL
+        AND TRIM(COALESCE(s.postal_code, r.postal_code)) != ''
+        AND UPPER(COALESCE(s.postal_code, r.postal_code)) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-')
+      `);
       queryParams.push(searchParams.postal_code);
       paramCount++;
     }
 
-    // School Classification
     if (searchParams.zone_code) {
-      whereClauses.push(`s.zone_code = $${paramCount}`);
-      queryParams.push(searchParams.zone_code);
-      paramCount++;
+      addSanitizedCondition('COALESCE(s.zone_code, r.zone_code)', searchParams.zone_code, true);
     }
 
     if (searchParams.mainlevel_code) {
-      whereClauses.push(`s.mainlevel_code = $${paramCount}`);
-      queryParams.push(searchParams.mainlevel_code);
+      addSanitizedCondition('COALESCE(s.mainlevel_code, r.mainlevel_code)', searchParams.mainlevel_code, true);
+    }
+
+    // ===== RAW_GENERAL_INFO FIELDS =====
+    if (searchParams.vp_name) {
+      addMultiColumnCondition([
+        'r.first_vp_name',
+        'r.second_vp_name',
+        'r.third_vp_name',
+        'r.fourth_vp_name',
+        'r.fifth_vp_name',
+        'r.sixth_vp_name'
+      ], searchParams.vp_name);
+    }
+
+    if (searchParams.email_address) {
+      addSanitizedCondition('r.email_address', searchParams.email_address);
+    }
+
+    if (searchParams.type_code) {
+      addSanitizedCondition('r.type_code', searchParams.type_code);
+    }
+
+    if (searchParams.nature_code) {
+      addSanitizedCondition('r.nature_code', searchParams.nature_code);
+    }
+
+    if (searchParams.session_code) {
+      addSanitizedCondition('r.session_code', searchParams.session_code);
+    }
+
+    if (searchParams.dgp_code) {
+      addSanitizedCondition('r.dgp_code', searchParams.dgp_code);
+    }
+
+    if (searchParams.mothertongue_code) {
+      addMultiColumnCondition([
+        'r.mothertongue1_code',
+        'r.mothertongue2_code',
+        'r.mothertongue3_code'
+      ], searchParams.mothertongue_code);
+    }
+
+    // Indicators - these should be exact matches (Yes/No)
+    if (searchParams.autonomous_ind) {
+      whereClauses.push(`r.autonomous_ind = $${paramCount}`);
+      queryParams.push(searchParams.autonomous_ind);
       paramCount++;
     }
 
-    // Build the base query - ONLY SELECT COLUMNS THAT EXIST
+    if (searchParams.gifted_ind) {
+      whereClauses.push(`r.gifted_ind = $${paramCount}`);
+      queryParams.push(searchParams.gifted_ind);
+      paramCount++;
+    }
+
+    if (searchParams.ip_ind) {
+      whereClauses.push(`r.ip_ind = $${paramCount}`);
+      queryParams.push(searchParams.ip_ind);
+      paramCount++;
+    }
+
+    if (searchParams.sap_ind) {
+      whereClauses.push(`r.sap_ind = $${paramCount}`);
+      queryParams.push(searchParams.sap_ind);
+      paramCount++;
+    }
+
+    if (searchParams.bus_desc) {
+      addSanitizedCondition('r.bus_desc', searchParams.bus_desc);
+    }
+
+    if (searchParams.mrt_desc) {
+      addSanitizedCondition('r.mrt_desc', searchParams.mrt_desc);
+    }
+
+    // ===== BASE QUERY WITH RAW_GENERAL_INFO JOIN =====
     let query = `
       SELECT DISTINCT
         s.school_id,
         s.school_name,
+        s.principal_name,
         s.address,
         s.postal_code,
         s.zone_code,
         s.mainlevel_code,
-        s.principal_name
+        NULLIF(NULLIF(TRIM(r.email_address), ''), 'NA') as email_address,
+        NULLIF(NULLIF(TRIM(r.telephone_no), ''), 'NA') as telephone_no,
+        NULLIF(NULLIF(TRIM(r.first_vp_name), ''), 'NA') as first_vp_name,
+        NULLIF(NULLIF(TRIM(r.second_vp_name), ''), 'NA') as second_vp_name,
+        NULLIF(NULLIF(TRIM(r.type_code), ''), 'NA') as type_code,
+        NULLIF(NULLIF(TRIM(r.nature_code), ''), 'NA') as nature_code,
+        NULLIF(NULLIF(TRIM(r.session_code), ''), 'NA') as session_code,
+        NULLIF(NULLIF(TRIM(r.dgp_code), ''), 'NA') as dgp_code,
+        NULLIF(NULLIF(TRIM(r.mothertongue1_code), ''), 'NA') as mothertongue1_code,
+        NULLIF(NULLIF(TRIM(r.mothertongue2_code), ''), 'NA') as mothertongue2_code,
+        NULLIF(NULLIF(TRIM(r.mothertongue3_code), ''), 'NA') as mothertongue3_code,
+        r.autonomous_ind,
+        r.gifted_ind,
+        r.ip_ind,
+        r.sap_ind,
+        NULLIF(NULLIF(TRIM(r.bus_desc), ''), 'NA') as bus_desc,
+        NULLIF(NULLIF(TRIM(r.mrt_desc), ''), 'NA') as mrt_desc
       FROM Schools s
+      LEFT JOIN raw_general_info r ON LOWER(s.school_name) = LOWER(r.school_name)
     `;
 
-    // Add joins if needed for related tables
+    // ===== RELATED TABLE SEARCHES =====
     let needsSubjectJoin = false;
     let needsCCAJoin = false;
     let needsProgrammeJoin = false;
     let needsDistinctiveJoin = false;
 
-    // Check if we need to search in related tables
+    // SUBJECTS
     if (searchParams.subject_desc) {
       needsSubjectJoin = true;
-      whereClauses.push(`LOWER(subj.subject_desc) LIKE LOWER($${paramCount})`);
+      whereClauses.push(`
+        LOWER(subj.subject_desc) LIKE LOWER($${paramCount})
+        AND subj.subject_desc IS NOT NULL
+        AND TRIM(subj.subject_desc) != ''
+        AND UPPER(subj.subject_desc) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-')
+      `);
       queryParams.push(`%${searchParams.subject_desc}%`);
       paramCount++;
     }
 
+    // CCAs
     if (searchParams.cca_generic_name) {
       needsCCAJoin = true;
-      whereClauses.push(`LOWER(c.cca_generic_name) LIKE LOWER($${paramCount})`);
+      whereClauses.push(`
+        LOWER(c.cca_generic_name) LIKE LOWER($${paramCount})
+        AND c.cca_generic_name IS NOT NULL
+        AND TRIM(c.cca_generic_name) != ''
+        AND UPPER(c.cca_generic_name) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-')
+      `);
       queryParams.push(`%${searchParams.cca_generic_name}%`);
       paramCount++;
     }
 
     if (searchParams.cca_customized_name) {
       needsCCAJoin = true;
-      whereClauses.push(`LOWER(sc.cca_customized_name) LIKE LOWER($${paramCount})`);
+      whereClauses.push(`
+        LOWER(sc.cca_customized_name) LIKE LOWER($${paramCount})
+        AND sc.cca_customized_name IS NOT NULL
+        AND TRIM(sc.cca_customized_name) != ''
+        AND UPPER(sc.cca_customized_name) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-')
+      `);
       queryParams.push(`%${searchParams.cca_customized_name}%`);
       paramCount++;
     }
 
+    if (searchParams.cca_grouping_desc) {
+      needsCCAJoin = true;
+      whereClauses.push(`
+        LOWER(c.cca_grouping_desc) LIKE LOWER($${paramCount})
+        AND c.cca_grouping_desc IS NOT NULL
+        AND TRIM(c.cca_grouping_desc) != ''
+        AND UPPER(c.cca_grouping_desc) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-')
+      `);
+      queryParams.push(`%${searchParams.cca_grouping_desc}%`);
+      paramCount++;
+    }
+
+    // PROGRAMMES
     if (searchParams.moe_programme_desc) {
       needsProgrammeJoin = true;
-      whereClauses.push(`LOWER(p.moe_programme_desc) LIKE LOWER($${paramCount})`);
+      whereClauses.push(`
+        LOWER(p.moe_programme_desc) LIKE LOWER($${paramCount})
+        AND p.moe_programme_desc IS NOT NULL
+        AND TRIM(p.moe_programme_desc) != ''
+        AND UPPER(p.moe_programme_desc) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-')
+      `);
       queryParams.push(`%${searchParams.moe_programme_desc}%`);
       paramCount++;
     }
 
+    // DISTINCTIVE PROGRAMMES (ALP/LLP)
     if (searchParams.alp_domain) {
       needsDistinctiveJoin = true;
-      whereClauses.push(`LOWER(d.alp_domain) LIKE LOWER($${paramCount})`);
+      whereClauses.push(`
+        LOWER(d.alp_domain) LIKE LOWER($${paramCount})
+        AND d.alp_domain IS NOT NULL
+        AND TRIM(d.alp_domain) != ''
+        AND UPPER(d.alp_domain) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-')
+      `);
       queryParams.push(`%${searchParams.alp_domain}%`);
       paramCount++;
     }
     
     if (searchParams.alp_title) {
       needsDistinctiveJoin = true;
-      whereClauses.push(`LOWER(d.alp_title) LIKE LOWER($${paramCount})`);
+      whereClauses.push(`
+        LOWER(d.alp_title) LIKE LOWER($${paramCount})
+        AND d.alp_title IS NOT NULL
+        AND TRIM(d.alp_title) != ''
+        AND UPPER(d.alp_title) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-')
+      `);
       queryParams.push(`%${searchParams.alp_title}%`);
       paramCount++;
     }
     
     if (searchParams.llp_domain1) {
       needsDistinctiveJoin = true;
-      whereClauses.push(`LOWER(d.llp_domain1) LIKE LOWER($${paramCount})`);
+      whereClauses.push(`
+        LOWER(d.llp_domain1) LIKE LOWER($${paramCount})
+        AND d.llp_domain1 IS NOT NULL
+        AND TRIM(d.llp_domain1) != ''
+        AND UPPER(d.llp_domain1) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-')
+      `);
       queryParams.push(`%${searchParams.llp_domain1}%`);
       paramCount++;
     }
     
     if (searchParams.llp_title) {
       needsDistinctiveJoin = true;
-      whereClauses.push(`LOWER(d.llp_title) LIKE LOWER($${paramCount})`);
+      whereClauses.push(`
+        LOWER(d.llp_title) LIKE LOWER($${paramCount})
+        AND d.llp_title IS NOT NULL
+        AND TRIM(d.llp_title) != ''
+        AND UPPER(d.llp_title) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-')
+      `);
       queryParams.push(`%${searchParams.llp_title}%`);
       paramCount++;
     }
 
-    // Add necessary JOINs
+    // ===== ADD JOINS FOR RELATED TABLES =====
     if (needsSubjectJoin) {
       query += `
         LEFT JOIN School_Subjects ss ON s.school_id = ss.school_id
@@ -1064,12 +1253,12 @@ app.post('/api/search/advanced', async (req, res) => {
       `;
     }
 
-    // Add WHERE clause
+    // ===== WHERE CLAUSE =====
     if (whereClauses.length > 0) {
       query += ` WHERE ${whereClauses.join(' AND ')}`;
     }
 
-    // Add ORDER BY and LIMIT
+    // ===== ORDER AND LIMIT =====
     query += `
       ORDER BY s.school_name ASC
       LIMIT 100
@@ -1077,6 +1266,7 @@ app.post('/api/search/advanced', async (req, res) => {
 
     console.log('Advanced Search Query:', query);
     console.log('Parameters:', queryParams);
+    console.log('Criteria count:', Object.keys(searchParams).length);
 
     const result = await pool.query(query, queryParams);
 
@@ -1100,8 +1290,26 @@ app.post('/api/search/advanced', async (req, res) => {
     res.status(500).json({
       success: false,
       error: err.message,
-      details: err.stack
+      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
+  }
+});
+
+// Temporary test endpoint 
+app.get('/api/test/check-columns', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT column_name, data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'schools'
+      ORDER BY ordinal_position
+    `);
+    res.json({
+      table: 'schools',
+      columns: result.rows
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
