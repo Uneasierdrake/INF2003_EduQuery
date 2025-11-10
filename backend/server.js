@@ -1300,10 +1300,51 @@ app.get('/api/postal-code/:postalCode', async (req, res) => {
   }
 });
 
-// ========== SEARCH BY POSTAL CODE DISTANCE ==========
+// ========== SEARCH BY POSTAL CODE DISTANCE (Using OneMap API and Caching) ==========
+const coordinateCache = new Map(); // Cache coordinates to avoid repeated API calls
+
+async function getCoordinatesFromPostal(postalCode) {
+  // Check cache first
+  if (coordinateCache.has(postalCode)) {
+    return coordinateCache.get(postalCode);
+  }
+
+  try {
+    const oneMapUrl = `https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${postalCode}&returnGeom=Y&getAddrDetails=Y`;
+    const response = await fetch(oneMapUrl);
+    const data = await response.json();
+
+    if (data.results && data.results.length > 0) {
+      const coords = {
+        latitude: parseFloat(data.results[0].LATITUDE),
+        longitude: parseFloat(data.results[0].LONGITUDE)
+      };
+      coordinateCache.set(postalCode, coords);
+      return coords;
+    }
+    return null;
+  } catch (error) {
+    console.error(`Error fetching coordinates for ${postalCode}:`, error.message);
+    return null;
+  }
+}
+
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
 app.post('/api/schools/search-by-postal-code', async (req, res) => {
   try {
     const { postal_code, radius_km } = req.body;
+
+    console.log('Distance search request:', { postal_code, radius_km });
 
     if (!postal_code || !radius_km) {
       return res.status(400).json({
@@ -1312,96 +1353,93 @@ app.post('/api/schools/search-by-postal-code', async (req, res) => {
       });
     }
 
-    // First, get coordinates for the postal code
-    const coordsQuery = `
-      SELECT DISTINCT
-        latitude::decimal as lat,
-        longitude::decimal as lon
-      FROM raw_general_info
-      WHERE postal_code = $1
-        AND latitude IS NOT NULL 
-        AND longitude IS NOT NULL
-        AND latitude != 'NA'
-        AND longitude != 'NA'
-      LIMIT 1
-    `;
+    // Get center coordinates
+    const centerCoords = await getCoordinatesFromPostal(postal_code);
     
-    const coordsResult = await pool.query(coordsQuery, [postal_code]);
-    
-    if (coordsResult.rows.length === 0) {
+    if (!centerCoords) {
       return res.status(404).json({
         success: false,
-        message: 'Postal code not found or coordinates not available'
+        message: 'Postal code not found. Please enter a valid Singapore postal code.'
       });
     }
-    
-    const { lat, lon } = coordsResult.rows[0];
 
-    // Now search for schools within radius using Haversine formula
-    const query = `
-      WITH school_coordinates AS (
-        SELECT 
-          s.*,
-          r.latitude::decimal as school_lat,
-          r.longitude::decimal as school_lon,
-          r.email_address,
-          r.telephone_no,
-          r.type_code,
-          r.nature_code
-        FROM Schools s
-        LEFT JOIN raw_general_info r ON LOWER(s.school_name) = LOWER(r.school_name)
-        WHERE r.latitude IS NOT NULL 
-          AND r.longitude IS NOT NULL
-          AND r.latitude != 'NA'
-          AND r.longitude != 'NA'
-      ),
-      distances AS (
-        SELECT 
-          *,
-          (
-            6371 * acos(
-              cos(radians($1)) * cos(radians(school_lat)) *
-              cos(radians(school_lon) - radians($2)) +
-              sin(radians($1)) * sin(radians(school_lat))
-            )
-          ) AS distance_km
-        FROM school_coordinates
-      )
+    console.log('Center coordinates:', centerCoords);
+
+    // Get all schools
+    const schoolsQuery = `
       SELECT 
-        school_id,
-        school_name,
-        address,
-        postal_code,
-        zone_code,
-        mainlevel_code,
-        principal_name,
-        email_address,
-        telephone_no,
-        type_code,
-        nature_code,
-        ROUND(distance_km::numeric, 2) as distance_km
-      FROM distances
-      WHERE distance_km <= $3
-      ORDER BY distance_km ASC
-      LIMIT 100
+        s.school_id,
+        s.school_name,
+        s.address,
+        s.postal_code,
+        s.zone_code,
+        s.mainlevel_code,
+        s.principal_name
+      FROM Schools s
+      WHERE s.postal_code IS NOT NULL
+        AND TRIM(s.postal_code) != ''
+        AND s.postal_code ~ '^[0-9]{6}$'
     `;
 
-    const result = await pool.query(query, [lat, lon, radius_km]);
+    const schoolsResult = await pool.query(schoolsQuery);
+    console.log('Total schools to check:', schoolsResult.rows.length);
+
+    // Process schools in batches to avoid overwhelming the API
+    const schoolsWithDistance = [];
+    const batchSize = 10;
+    
+    for (let i = 0; i < schoolsResult.rows.length; i += batchSize) {
+      const batch = schoolsResult.rows.slice(i, i + batchSize);
+      
+      const batchPromises = batch.map(async (school) => {
+        const schoolCoords = await getCoordinatesFromPostal(school.postal_code);
+        
+        if (schoolCoords) {
+          const distance_km = calculateDistance(
+            centerCoords.latitude,
+            centerCoords.longitude,
+            schoolCoords.latitude,
+            schoolCoords.longitude
+          );
+          
+          if (distance_km <= radius_km) {
+            return {
+              ...school,
+              distance_km: Math.round(distance_km * 100) / 100
+            };
+          }
+        }
+        return null;
+      });
+      
+      const batchResults = await Promise.all(batchPromises);
+      schoolsWithDistance.push(...batchResults.filter(s => s !== null));
+      
+      // Small delay between batches
+      if (i + batchSize < schoolsResult.rows.length) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+    }
+
+    // Sort by distance
+    schoolsWithDistance.sort((a, b) => a.distance_km - b.distance_km);
+
+    console.log('Schools within radius:', schoolsWithDistance.length);
 
     logActivity('search_by_postal_code', {
       postal_code,
       radius_km,
-      results_count: result.rows.length
+      results_count: schoolsWithDistance.length
     });
 
     res.json({
       success: true,
-      results: result.rows,
+      results: schoolsWithDistance,
       search_params: {
         postal_code,
         radius_km,
-        center_latitude: lat,
-        center_longitude: lon
+        center_latitude: centerCoords.latitude,
+        center_longitude: centerCoords.longitude
       }
     });
 
@@ -1409,13 +1447,13 @@ app.post('/api/schools/search-by-postal-code', async (req, res) => {
     console.error('Postal code distance search error:', err);
     res.status(500).json({
       success: false,
-      error: err.message
+      error: 'Failed to search schools by distance',
+      message: err.message
     });
   }
 });
 
 // ========== MONGODB ANALYTICS ROUTES ==========
-
 // Get activity logs
 app.get('/api/analytics/logs', async (req, res) => {
   try {
