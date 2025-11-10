@@ -28,6 +28,36 @@ const ZONE_COLORS = {
   'CENTRAL': '#8B5CF6'
 };
 
+// ========== Authentication Helper ==========
+function getAuthToken() {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+        console.error('❌ No authentication token found');
+        return null;
+    }
+    
+    // Verify token format
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+            console.error('❌ Invalid token format');
+            return null;
+        }
+        return token;
+    } catch (error) {
+        console.error('❌ Token validation error:', error);
+        return null;
+    }
+}
+
+function handleAuthError() {
+    localStorage.removeItem('authToken');
+    showToast('Session expired. Please login again.', 'error');
+    setTimeout(() => {
+        window.location.href = '/login?error=Session expired';
+    }, 2000);
+}
+
 // ========== Initialize Map ==========
 function initializeMap() {
   // Prevent double initialization
@@ -277,13 +307,54 @@ async function loadSchoolsMap() {
   showMapLoading(true);
   
   try {
-    // Fetch all schools from your API
-    const response = await fetch('/api/schools?name=');
-    if (!response.ok) throw new Error('Failed to fetch schools');
+    // Get authentication token
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication required. Please login again.');
+    }
+
+    console.log('🔑 Token found, fetching schools...');
     
-    schools = await response.json();
+    // Fetch all schools from your API with authentication
+    const response = await fetch('/api/schools?name=', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    console.log('📡 Response status:', response.status);
+
+    if (response.status === 401) {
+      handleAuthError();
+      return;
+    }
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    // Get response as text first to handle potential errors
+    const responseText = await response.text();
     
-    console.log(`Loaded ${schools.length} schools from database`);
+    // Check if response is HTML (error page) instead of JSON
+    if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
+      throw new Error('Server returned HTML instead of JSON data. Check API endpoint.');
+    }
+
+    // Try to parse as JSON
+    let schoolsData;
+    try {
+      schoolsData = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('❌ JSON parse error:', parseError);
+      console.error('Response content:', responseText);
+      throw new Error('Invalid JSON response from server');
+    }
+    
+    schools = schoolsData;
+    
+    console.log(`✅ Loaded ${schools.length} schools from database`);
     
     // Update statistics
     document.getElementById('totalSchoolsMap').textContent = schools.length;
@@ -295,9 +366,71 @@ async function loadSchoolsMap() {
   } catch (error) {
     console.error('Error loading schools:', error);
     showToast('Failed to load schools: ' + error.message, 'error');
+    
+    // Add test data for debugging if API fails
+    if (schools.length === 0) {
+      addTestSchoolsForDebug();
+    }
   } finally {
     showMapLoading(false);
   }
+}
+
+// ========== Test Data for Debugging ==========
+function addTestSchoolsForDebug() {
+  console.log('🧪 Adding test schools for debugging...');
+  
+  const testSchools = [
+    {
+      school_id: 1,
+      school_name: "Test Primary School North",
+      address: "123 North Bridge Road, Singapore",
+      postal_code: "179103",
+      zone_code: "NORTH",
+      mainlevel_code: "PRIMARY",
+      principal_name: "Mr. Tan Ah Kow"
+    },
+    {
+      school_id: 2,
+      school_name: "Test Secondary School South",
+      address: "456 South Road, Singapore",
+      postal_code: "118259", 
+      zone_code: "SOUTH",
+      mainlevel_code: "SECONDARY",
+      principal_name: "Ms. Lee Mei Ling"
+    },
+    {
+      school_id: 3,
+      school_name: "Test Mixed School Central",
+      address: "789 Orchard Road, Singapore",
+      postal_code: "238839",
+      zone_code: "CENTRAL", 
+      mainlevel_code: "MIXED LEVEL",
+      principal_name: "Dr. Raj Kumar"
+    },
+    {
+      school_id: 4,
+      school_name: "Test Junior College East",
+      address: "321 East Coast Road, Singapore", 
+      postal_code: "428994",
+      zone_code: "EAST",
+      mainlevel_code: "JUNIOR COLLEGE",
+      principal_name: "Mr. Wong Chee Meng"
+    },
+    {
+      school_id: 5,
+      school_name: "Test International School West",
+      address: "987 West Coast Highway, Singapore",
+      postal_code: "126743",
+      zone_code: "WEST",
+      mainlevel_code: "INTERNATIONAL",
+      principal_name: "Ms. Sarah Johnson"
+    }
+  ];
+  
+  schools = testSchools;
+  displaySchools(testSchools);
+  showToast('Using demo data - API connection unavailable', 'warning');
 }
 
 // ========== Display Schools on Map ==========
@@ -704,6 +837,13 @@ function showMapHelp() {
   );
 }
 
+// ========== Refresh Map Function ==========
+function refreshMap() {
+  console.log('🔄 Refreshing map data...');
+  showToast('Refreshing school data...', 'info');
+  loadSchoolsMap();
+}
+
 // ========== Initialize on Page Load ==========
 document.addEventListener('DOMContentLoaded', function() {
   console.log('Map module loaded and ready');
@@ -722,3 +862,13 @@ document.addEventListener('DOMContentLoaded', function() {
   
   console.log('Map event listeners attached - waiting for map view activation');
 });
+
+// ========== Public API ==========
+window.initializeMap = initializeMap;
+window.loadSchoolsMap = loadSchoolsMap;
+window.searchSchoolsOnMap = searchSchoolsOnMap;
+window.clearMapSearch = clearMapSearch;
+window.resetMapView = resetMapView;
+window.refreshMap = refreshMap;
+window.showMapHelp = showMapHelp;
+window.filterByZone = filterByZone;
