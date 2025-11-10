@@ -1,10 +1,32 @@
+// ========== ANALYTICS FUNCTIONS WITH AUTHENTICATION ==========
+
 // ========== 1. Load Zone Statistics ==========
 window.loadZoneStatistics = async function() {
   const container = document.getElementById('zoneStatsContent');
   container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
   
   try {
-    const res = await fetch('/api/analytics/schools-by-zone');
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const res = await fetch('/api/analytics/schools-by-zone', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (res.status === 401) {
+      handleAuthError();
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
     const result = await res.json();
     
     if (result.success && result.data.length > 0) {
@@ -28,7 +50,7 @@ window.loadZoneStatistics = async function() {
     }
   } catch (err) {
     console.error('Zone statistics error:', err);
-    container.innerHTML = '<div class="error-state">Failed to load data</div>';
+    container.innerHTML = '<div class="error-state">Failed to load data: ' + err.message + '</div>';
   }
 };
 
@@ -38,7 +60,27 @@ window.loadSubjectCount = async function() {
   container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
   
   try {
-    const res = await fetch('/api/analytics/schools-subject-count');
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const res = await fetch('/api/analytics/schools-subject-count', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (res.status === 401) {
+      handleAuthError();
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
     const result = await res.json();
     
     if (result.success && result.data.length > 0) {
@@ -79,7 +121,7 @@ window.loadSubjectCount = async function() {
     }
   } catch (err) {
     console.error('Subject count error:', err);
-    container.innerHTML = '<div class="error-state">Failed to load data</div>';
+    container.innerHTML = '<div class="error-state">Failed to load data: ' + err.message + '</div>';
   }
 };
 
@@ -89,7 +131,27 @@ window.loadAboveAverage = async function() {
   container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
   
   try {
-    const res = await fetch('/api/analytics/above-average-subjects');
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const res = await fetch('/api/analytics/above-average-subjects', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (res.status === 401) {
+      handleAuthError();
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
     const result = await res.json();
     
     if (result.success && result.data.length > 0) {
@@ -131,7 +193,7 @@ window.loadAboveAverage = async function() {
     }
   } catch (err) {
     console.error('Above average error:', err);
-    container.innerHTML = '<div class="error-state">Failed to load data</div>';
+    container.innerHTML = '<div class="error-state">Failed to load data: ' + err.message + '</div>';
   }
 };
 
@@ -141,7 +203,27 @@ window.loadCCAParticipation = async function() {
   container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
   
   try {
-    const res = await fetch('/api/analytics/cca-participation');
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const res = await fetch('/api/analytics/cca-participation', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (res.status === 401) {
+      handleAuthError();
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
     const result = await res.json();
     
     if (result.success && result.data.length > 0) {
@@ -173,7 +255,7 @@ window.loadCCAParticipation = async function() {
     }
   } catch (err) {
     console.error('CCA participation error:', err);
-    container.innerHTML = '<div class="error-state">Failed to load data</div>';
+    container.innerHTML = '<div class="error-state">Failed to load data: ' + err.message + '</div>';
   }
 };
 
@@ -183,7 +265,27 @@ window.loadDataCompleteness = async function() {
   container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
   
   try {
-    const res = await fetch('/api/analytics/data-completeness');
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const res = await fetch('/api/analytics/data-completeness', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (res.status === 401) {
+      handleAuthError();
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
     const result = await res.json();
     
     if (result.success && result.data.length > 0) {
@@ -237,7 +339,7 @@ window.loadDataCompleteness = async function() {
     }
   } catch (err) {
     console.error('Data completeness error:', err);
-    container.innerHTML = '<div class="error-state">Failed to load data</div>';
+    container.innerHTML = '<div class="error-state">Failed to load data: ' + err.message + '</div>';
   }
 };
 
@@ -247,7 +349,27 @@ window.loadZoneComparison = async function() {
   container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
   
   try {
-    const res = await fetch('/api/analytics/zone-comparison');
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const res = await fetch('/api/analytics/zone-comparison', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (res.status === 401) {
+      handleAuthError();
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
     const result = await res.json();
     
     if (result.success && result.data.length > 0) {
@@ -282,12 +404,183 @@ window.loadZoneComparison = async function() {
     }
   } catch (err) {
     console.error('Zone comparison error:', err);
-    container.innerHTML = '<div class="error-state">Failed to load data</div>';
+    container.innerHTML = '<div class="error-state">Failed to load data: ' + err.message + '</div>';
   }
 };
 
+// ========== 7. Load Popular Searches (Admin Only) ==========
+window.loadPopularSearches = async function() {
+  const container = document.getElementById('popularSearchesContent');
+  if (!container) return;
+  
+  container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
+  
+  try {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const res = await fetch('/api/analytics/popular', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (res.status === 401) {
+      handleAuthError();
+      return;
+    }
+
+    if (res.status === 403) {
+      container.innerHTML = '<div class="empty-state-small">Admin access required for search analytics</div>';
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
+    const result = await res.json();
+    
+    if (result.length > 0) {
+      let html = '<table class="analytics-table compact">';
+      html += '<thead><tr><th>Search Term</th><th>Count</th><th>Popularity</th></tr></thead>';
+      html += '<tbody>';
+      
+      result.forEach((item, index) => {
+        const maxCount = result[0].count;
+        const percentage = (item.count / maxCount) * 100;
+        
+        html += `<tr>
+          <td>${item._id || 'Unknown'}</td>
+          <td><strong>${item.count}</strong></td>
+          <td>
+            <div class="popularity-bar-container">
+              <div class="popularity-bar" style="width: ${percentage}%"></div>
+              <span class="popularity-text">${Math.round(percentage)}%</span>
+            </div>
+          </td>
+        </tr>`;
+      });
+      
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    } else {
+      container.innerHTML = '<div class="empty-state-small">No search data available</div>';
+    }
+  } catch (err) {
+    console.error('Popular searches error:', err);
+    container.innerHTML = '<div class="error-state">Failed to load data: ' + err.message + '</div>';
+  }
+};
+
+// ========== 8. Load Activity Logs (Admin Only) ==========
+window.loadActivityLogs = async function() {
+  const container = document.getElementById('activityLogsContent');
+  if (!container) return;
+  
+  container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
+  
+  try {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const res = await fetch('/api/analytics/logs', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (res.status === 401) {
+      handleAuthError();
+      return;
+    }
+
+    if (res.status === 403) {
+      container.innerHTML = '<div class="empty-state-small">Admin access required for activity logs</div>';
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
+    const logs = await res.json();
+    
+    if (logs.length > 0) {
+      let html = '<table class="analytics-table compact">';
+      html += '<thead><tr><th>Time</th><th>Action</th><th>User</th><th>Details</th></tr></thead>';
+      html += '<tbody>';
+      
+      logs.slice(0, 20).forEach(log => {
+        const time = new Date(log.timestamp).toLocaleString();
+        const username = log.data?.username || log.data?.admin_username || 'System';
+        
+        html += `<tr>
+          <td class="timestamp">${time}</td>
+          <td><span class="action-badge action-${log.action}">${log.action.replace(/_/g, ' ')}</span></td>
+          <td>${username}</td>
+          <td class="log-details">${formatLogDetails(log.data)}</td>
+        </tr>`;
+      });
+      
+      html += '</tbody></table>';
+      
+      if (logs.length > 20) {
+        html += `<div class="table-footer">Showing latest 20 of ${logs.length} activities</div>`;
+      }
+      
+      container.innerHTML = html;
+    } else {
+      container.innerHTML = '<div class="empty-state-small">No activity logs available</div>';
+    }
+  } catch (err) {
+    console.error('Activity logs error:', err);
+    container.innerHTML = '<div class="error-state">Failed to load data: ' + err.message + '</div>';
+  }
+};
+
+// ========== HELPER FUNCTIONS ==========
+
+function getAuthToken() {
+  const token = localStorage.getItem('authToken');
+  if (!token) {
+    console.error('No authentication token found');
+    return null;
+  }
+  return token;
+}
+
+function handleAuthError() {
+  localStorage.removeItem('authToken');
+  showToast('Session expired. Please login again.', 'error');
+  setTimeout(() => {
+    window.location.href = '/login?error=Session expired';
+  }, 2000);
+}
+
+function formatLogDetails(data) {
+  if (!data) return '-';
+  
+  const details = [];
+  
+  if (data.query) details.push(`Search: "${data.query}"`);
+  if (data.results_count !== undefined) details.push(`Results: ${data.results_count}`);
+  if (data.school_name) details.push(`School: ${data.school_name}`);
+  if (data.criteria_count) details.push(`Criteria: ${data.criteria_count}`);
+  
+  return details.join(', ') || JSON.stringify(data).substring(0, 100) + '...';
+}
+
 // ========== Load All Analytics ==========
 window.loadAllAnalytics = function() {
+  console.log('Loading all analytics...');
+  
   loadZoneStatistics();
   loadSubjectCount();
   loadAboveAverage();
@@ -295,13 +588,52 @@ window.loadAllAnalytics = function() {
   loadDataCompleteness();
   loadZoneComparison();
   
-  showToast('Loading all analytics...', 'info');
+  // Only load admin analytics if user is admin
+  if (isUserAdmin()) {
+    loadPopularSearches();
+    loadActivityLogs();
+  }
+  
+  showToast('Loading analytics data...', 'info');
+};
+
+// ========== Refresh Analytics ==========
+window.refreshAnalytics = function() {
+  console.log('Refreshing analytics...');
+  showToast('Refreshing analytics data...', 'info');
+  loadAllAnalytics();
+};
+
+// ========== Export Analytics Data ==========
+window.exportAnalyticsData = async function() {
+  try {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    showToast('Preparing data export...', 'info');
+    
+    // You can implement CSV/Excel export here
+    // For now, just show a message
+    setTimeout(() => {
+      showToast('Export feature coming soon!', 'info');
+    }, 1000);
+    
+  } catch (err) {
+    console.error('Export error:', err);
+    showToast('Export failed: ' + err.message, 'error');
+  }
 };
 
 // ========== Initialize Analytics When View is Shown ==========
-// Add this to your switchView function to auto-load analytics
-// if (viewName === 'analytics') {
-//   setTimeout(() => loadAllAnalytics(), 100);
-// }
+// Add this to your main JavaScript file's switchView function:
+/*
+if (viewName === 'analytics') {
+  setTimeout(() => {
+    loadAllAnalytics();
+  }, 300);
+}
+*/
 
-console.log('Analytics functions loaded');
+console.log('✅ Analytics functions loaded with authentication');
