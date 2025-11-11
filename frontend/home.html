@@ -16,6 +16,9 @@
   
   <!-- Analytics Styles -->
   <link rel="stylesheet" href="analytics.css">
+
+  <!-- Advance_Search Styles (within index page)-->
+  <link rel="stylesheet" href="advanced_search.css">
 </head>
 <body>
   <!-- Header -->
@@ -100,6 +103,31 @@
           Search
         </button>
       </div>
+
+      <!-- Advanced Search Link -->
+      <div> <!-- style="text-align: right; margin-top: 16px/5%;" -->
+        <button onclick="showAdvancedSearch()" class="btn-link">
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
+          </svg>
+          Advanced Search
+        </button>
+      </div>
+
+      <button onclick="startComparisonMode()" class="btn-link" style="margin-left: 12px;">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+          <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5z"/>
+        </svg>
+        Compare Schools
+      </button>
+
+      <button onclick="showDistanceSearch()" class="btn-link" style="margin-left: 12px;">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"/>
+        </svg>
+        Search by Distance
+      </button>
 
       <!-- Search Tips -->
       <div class="search-tips">
@@ -678,6 +706,260 @@
     </div>
   </div>
 
+
+    <!-- Advanced Search Modal -->
+  <div id="advancedSearchModal" class="modal">
+    <div class="modal-overlay" onclick="hideAdvancedSearch()"></div>
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h3>Advanced Search</h3>
+        <button class="modal-close" onclick="hideAdvancedSearch()">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          </svg>
+        </button>
+      </div>
+      
+      <form id="advancedSearchForm" onsubmit="runAdvancedQuery(event)">
+        <div class="advanced-search-body">
+          
+          <!-- School Information Section -->
+          <div class="search-section-group">
+            <h4 class="search-section-title">School Information</h4>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="adv_school_name">School Name</label>
+                <input type="text" id="adv_school_name" placeholder="e.g., Anderson Secondary">
+              </div>
+
+              <div class="form-group">
+                <label for="adv_principal_name">Principal Name</label>
+                <input type="text" id="adv_principal_name" placeholder="e.g., Mrs. Tan">
+              </div>
+
+              <div class="form-group">
+                <label for="adv_vp_name">Vice Principal Name</label>
+                <input type="text" id="adv_vp_name" placeholder="e.g., Mr. Lee">
+              </div>
+
+              <div class="form-group">
+                <label for="adv_email">Email Address</label>
+                <input type="email" id="adv_email" placeholder="e.g., school@moe.edu.sg">
+              </div>
+
+              <div class="form-group full-width">
+                <label for="adv_address">Address</label>
+                <input type="text" id="adv_address" placeholder="e.g., Ang Mo Kio Avenue 6">
+              </div>
+
+              <div class="form-group">
+                <label for="adv_postal_code">Postal Code</label>
+                <input type="text" id="adv_postal_code" placeholder="6-digit code" pattern="[0-9]{6}">
+              </div>
+            </div>
+          </div>
+
+          <!-- School Classification Section -->
+          <div class="search-section-group">
+            <h4 class="search-section-title">School Classification</h4>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="adv_zone_code">Zone</label>
+                <select id="adv_zone_code">
+                  <option value="">All Zones</option>
+                  <option value="NORTH">North</option>
+                  <option value="SOUTH">South</option>
+                  <option value="EAST">East</option>
+                  <option value="WEST">West</option>
+                  <option value="CENTRAL">Central</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="adv_mainlevel_code">Main Level</label>
+                <select id="adv_mainlevel_code">
+                  <option value="">All Levels</option>
+                  <option value="PRIMARY">Primary</option>
+                  <option value="SECONDARY">Secondary</option>
+                  <option value="JUNIOR COLLEGE">Junior College</option>
+                  <option value="CENTRALISED INSTITUTE">Centralised Institute</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="adv_type_code">School Type</label>
+                <input type="text" id="adv_type_code" placeholder="e.g., GOVERNMENT">
+              </div>
+
+              <div class="form-group">
+                <label for="adv_nature_code">Nature Code</label>
+                <input type="text" id="adv_nature_code" placeholder="e.g., CO-ED">
+              </div>
+
+              <div class="form-group">
+                <label for="adv_school_section">School Section</label>
+                <input type="text" id="adv_school_section" placeholder="e.g., MAINSTREAM">
+              </div>
+
+              <div class="form-group">
+                <label for="adv_session_code">Session Code</label>
+                <input type="text" id="adv_session_code" placeholder="e.g., AM/PM">
+              </div>
+
+              <div class="form-group">
+                <label for="adv_dgp_code">DGP Code</label>
+                <input type="text" id="adv_dgp_code" placeholder="DGP classification">
+              </div>
+
+              <div class="form-group">
+                <label for="adv_mothertongue_code">Mother Tongue Code</label>
+                <input type="text" id="adv_mothertongue_code" placeholder="e.g., Malay/Chinese/Tamil">
+              </div>
+            </div>
+          </div>
+
+          <!-- Special Programmes Section -->
+          <div class="search-section-group">
+            <h4 class="search-section-title">Special Programmes & Indicators</h4>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="adv_autonomous_ind">Autonomous School</label>
+                <select id="adv_autonomous_ind">
+                  <option value="">Any</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="adv_gifted_ind">Gifted Programme</label>
+                <select id="adv_gifted_ind">
+                  <option value="">Any</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="adv_ip_ind">Integrated Programme</label>
+                <select id="adv_ip_ind">
+                  <option value="">Any</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="adv_sap_ind">SAP School</label>
+                <select id="adv_sap_ind">
+                  <option value="">Any</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+
+              <div class="form-group full-width">
+                <label for="adv_moe_programme_desc">MOE Programme</label>
+                <input type="text" id="adv_moe_programme_desc" placeholder="e.g., Applied Learning Programme">
+              </div>
+            </div>
+          </div>
+
+          <!-- ALP Section -->
+          <div class="search-section-group">
+            <h4 class="search-section-title">Applied Learning Programme (ALP)</h4>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="adv_alp_domain">ALP Domain</label>
+                <input type="text" id="adv_alp_domain" placeholder="e.g., Science, Technology">
+              </div>
+
+              <div class="form-group full-width">
+                <label for="adv_alp_title">ALP Title</label>
+                <input type="text" id="adv_alp_title" placeholder="ALP programme title">
+              </div>
+            </div>
+          </div>
+
+          <!-- LLP Section -->
+          <div class="search-section-group">
+            <h4 class="search-section-title">Learning for Life Programme (LLP)</h4>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="adv_llp_domain1">LLP Domain</label>
+                <input type="text" id="adv_llp_domain1" placeholder="e.g., Sports, Arts">
+              </div>
+
+              <div class="form-group full-width">
+                <label for="adv_llp_title">LLP Title</label>
+                <input type="text" id="adv_llp_title" placeholder="LLP programme title">
+              </div>
+            </div>
+          </div>
+
+          <!-- Subjects & CCAs Section -->
+          <div class="search-section-group">
+            <h4 class="search-section-title">Subjects & Co-Curricular Activities</h4>
+            <div class="form-grid">
+              <div class="form-group full-width">
+                <label for="adv_subject_desc">Subject</label>
+                <input type="text" id="adv_subject_desc" placeholder="e.g., Physics, Mathematics">
+              </div>
+
+              <div class="form-group">
+                <label for="adv_cca_generic_name">CCA Generic Name</label>
+                <input type="text" id="adv_cca_generic_name" placeholder="e.g., Basketball">
+              </div>
+
+              <div class="form-group">
+                <label for="adv_cca_customized_name">CCA Customized Name</label>
+                <input type="text" id="adv_cca_customized_name" placeholder="School-specific CCA name">
+              </div>
+
+              <div class="form-group full-width">
+                <label for="adv_cca_grouping_desc">CCA Grouping</label>
+                <input type="text" id="adv_cca_grouping_desc" placeholder="e.g., Sports, Clubs & Societies">
+              </div>
+            </div>
+          </div>
+
+          <!-- Transportation Section -->
+          <div class="search-section-group">
+            <h4 class="search-section-title">Transportation</h4>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="adv_bus_desc">Bus Services</label>
+                <input type="text" id="adv_bus_desc" placeholder="e.g., 123, 456">
+              </div>
+
+              <div class="form-group">
+                <label for="adv_mrt_desc">MRT Station</label>
+                <input type="text" id="adv_mrt_desc" placeholder="e.g., Ang Mo Kio">
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" onclick="clearAdvancedSearch()">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1z"/>
+            </svg>
+            Clear All
+          </button>
+          <button type="button" class="btn-secondary" onclick="hideAdvancedSearch()">Cancel</button>
+          <button type="submit" class="btn-primary">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M9 2a7 7 0 015.618 11.176l4.1 4.1a1 1 0 01-1.414 1.414l-4.1-4.1A7 7 0 119 2zm0 2a5 5 0 100 10 5 5 0 000-10z"/>
+            </svg>
+            Search
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Toast Notification -->
   <div id="toast" class="toast">
     <div class="toast-content">
@@ -707,5 +989,7 @@
   <script src="script.js"></script>
   <!-- Analytics Script -->
   <script src="analytics.js"></script>
+  <!-- Advance_Search Script -->
+  <script src="advanced_search.js"></script>
 </body>
 </html>
