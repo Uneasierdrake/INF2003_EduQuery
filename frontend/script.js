@@ -1,0 +1,1388 @@
+// ========== Debug Mode ==========
+console.log('EduQuery Script Loaded');
+
+// ========== AUTHENTICATION & ROLE MANAGEMENT ==========
+
+// Function to get token from URL or localStorage
+function getAuthToken() {
+    // First, try to get token from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenFromUrl = urlParams.get('token');
+    
+    if (tokenFromUrl) {
+        console.log('🔑 Token found in URL');
+        // Store token from URL in localStorage
+        localStorage.setItem('authToken', tokenFromUrl);
+        // Clean URL by removing token parameter
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+        return tokenFromUrl;
+    }
+    
+    // Fall back to localStorage
+    const tokenFromStorage = localStorage.getItem('authToken');
+    if (tokenFromStorage) {
+        console.log('🔑 Token found in localStorage');
+        return tokenFromStorage;
+    }
+    
+    console.log('❌ No token found');
+    return null;
+}
+
+// Function to validate token and redirect if invalid
+function validateAuth() {
+    const token = getAuthToken();
+    
+    if (!token) {
+        console.log('No authentication token found, redirecting to login...');
+        showToast('Please login to access the dashboard', 'error');
+        setTimeout(() => {
+            window.location.href = '/login?error=Authentication required';
+        }, 1000);
+        return false;
+    }
+    
+    // Verify token is valid JWT format
+    try {
+        // Decode the token payload (without verification)
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const expiry = payload.exp * 1000; // Convert to milliseconds
+        const now = Date.now();
+        
+        console.log('🔍 Token payload:', payload);
+        console.log('⏰ Token expires:', new Date(expiry).toLocaleString());
+        
+        if (now > expiry) {
+            console.log('Token expired, redirecting to login...');
+            localStorage.removeItem('authToken');
+            showToast('Session expired, please login again', 'error');
+            setTimeout(() => {
+                window.location.href = '/login?error=Session expired';
+            }, 1000);
+            return false;
+        }
+        
+        console.log('✅ Token is valid');
+        return true;
+    } catch (error) {
+        console.log('Invalid token format, redirecting to login...');
+        localStorage.removeItem('authToken');
+        showToast('Invalid session, please login again', 'error');
+        setTimeout(() => {
+            window.location.href = '/login?error=Invalid session';
+        }, 1000);
+        return false;
+    }
+}
+
+// Function to get auth headers for API calls
+function getAuthHeaders() {
+    const token = getAuthToken();
+    
+    if (!token) {
+        console.error('No token available for API call');
+        return {};
+    }
+    
+    return {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+    };
+}
+
+// Check if current user is admin
+function isUserAdmin() {
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    return userData.is_admin === true;
+}
+
+// Update UI based on user role
+function updateUIForUserRole() {
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    const isAdmin = userData.is_admin === true;
+    
+    console.log('👤 User role update:', { username: userData.username, isAdmin: isAdmin });
+    
+    // Update welcome message
+    const welcomeElement = document.getElementById('userWelcome');
+    if (welcomeElement) {
+        if (isAdmin) {
+            welcomeElement.textContent = `Welcome, Administrator ${userData.username}!`;
+            welcomeElement.className = 'admin-welcome';
+        } else {
+            welcomeElement.textContent = `Welcome, ${userData.username}!`;
+            welcomeElement.className = 'user-welcome';
+        }
+    }
+    
+    // Show/hide admin features
+    const adminFeatures = document.querySelectorAll('.admin-only');
+    adminFeatures.forEach(feature => {
+        if (feature) {
+            feature.style.display = isAdmin ? 'block' : 'none';
+        }
+    });
+    
+    // Show/hide admin buttons in manage view
+    const addSchoolBtn = document.querySelector('button[onclick="showAddModal()"]');
+    if (addSchoolBtn) {
+        addSchoolBtn.style.display = isAdmin ? 'inline-block' : 'none';
+    }
+}
+
+// ========== GLOBAL VARIABLES ==========
+let pendingDeleteId = null;
+let pendingDeleteName = null;
+
+// ========== VIEW MANAGEMENT ==========
+
+window.switchView = function(viewName) {
+  console.log('Switching to view:', viewName);
+  
+  const views = document.querySelectorAll('.view');
+  const navBtns = document.querySelectorAll('.nav-btn');
+  
+  views.forEach(view => view.classList.remove('active'));
+  navBtns.forEach(btn => btn.classList.remove('active'));
+  
+  const targetView = document.getElementById(`${viewName}View`);
+  const targetBtn = document.querySelector(`[data-view="${viewName}"]`);
+  
+  if (targetView) {
+    targetView.classList.add('active');
+    console.log('View activated:', viewName);
+  } else {
+    console.error('View not found:', `${viewName}View`);
+  }
+  
+  if (targetBtn) {
+    targetBtn.classList.add('active');
+  }
+  
+  if (viewName === 'manage') {
+    loadSchoolStats();
+  }
+
+  if (viewName === 'map') {
+    // Wait for view transition to complete before initializing map
+    setTimeout(() => {
+      if (!window.mapInitialized) {
+        // Check if map container is visible
+        const mapView = document.getElementById('mapView');
+        if (mapView && mapView.classList.contains('active')) {
+          if (typeof initializeMap === 'function') {
+            try {
+              initializeMap();
+              loadSchoolsMap();
+              window.mapInitialized = true;
+            } catch (error) {
+              console.error('Map initialization error:', error);
+              window.mapInitialized = false;
+            }
+          }
+        }
+      } else {
+        // If map already exists, just invalidate size to ensure proper rendering
+        if (window.map) {
+          try {
+            window.map.invalidateSize();
+          } catch (error) {
+            console.error('Map resize error:', error);
+          }
+        }
+      }
+    }, 300);
+  }
+};
+
+// ========== INITIALIZATION ==========
+
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM Loaded - Attaching event listeners');
+  
+  // Check authentication first
+  if (!validateAuth()) {
+    return; // Redirect will happen in validateAuth
+  }
+  
+  // Authentication successful, continue loading
+  console.log('✅ Authentication valid, loading dashboard...');
+  
+  // Update UI for user role
+  updateUIForUserRole();
+  
+  const navBtns = document.querySelectorAll('.nav-btn');
+  console.log('Found nav buttons:', navBtns.length);
+  
+  navBtns.forEach((btn, index) => {
+    console.log(`Nav button ${index}:`, btn.dataset.view);
+    btn.addEventListener('click', () => {
+      console.log('Button clicked:', btn.dataset.view);
+      switchView(btn.dataset.view);
+    });
+  });
+  
+  // Allow Enter key to trigger search
+  const searchBox = document.getElementById('searchBox');
+  if (searchBox) {
+    searchBox.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        runQuery();
+      }
+    });
+
+    // Live Partial Search Suggestions (Universal)
+    let searchTimeout;
+    let dropdown = document.getElementById('searchSuggestions');
+    if (!dropdown) {
+      dropdown = document.createElement('div');
+      dropdown.id = 'searchSuggestions';
+      dropdown.className = 'search-results';
+      searchBox.parentElement.appendChild(dropdown);
+    }
+
+    searchBox.addEventListener('input', () => {
+      const query = searchBox.value.trim();
+      dropdown.innerHTML = '';
+      dropdown.style.display = 'none';
+      clearTimeout(searchTimeout);
+
+      if (query.length < 2) return;
+
+      searchTimeout = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/search/universal?query=${encodeURIComponent(query)}`, {
+            headers: getAuthHeaders()
+          });
+          
+          if (res.status === 401) {
+            // Token expired
+            localStorage.removeItem('authToken');
+            showToast('Session expired, please login again', 'error');
+            setTimeout(() => {
+              window.location.href = '/login?error=Session expired';
+            }, 1500);
+            return;
+          }
+          
+          const data = await res.json();
+          
+          if (!data.success || !data.results) return;
+
+          const results = [
+            ...data.results.schools,
+            ...data.results.subjects,
+            ...data.results.ccas,
+            ...data.results.programmes,
+            ...data.results.distinctives
+          ];
+
+          if (results.length === 0) {
+            dropdown.innerHTML = `<div class="suggestion-item no-results">No matches found</div>`;
+          } else {
+            results.slice(0, 10).forEach((item) => {
+              const name = item.name || item.school_name || item.subject_desc || item.cca_generic_name || item.moe_programme_desc || 'Unnamed';
+              const el = document.createElement('div');
+              el.className = 'suggestion-item';
+              el.textContent = name;
+              el.onclick = () => {
+                searchBox.value = name;
+                dropdown.style.display = 'none';
+                runQuery();
+              };
+              dropdown.appendChild(el);
+            });
+          }
+
+          dropdown.style.display = 'block';
+        } catch (err) {
+          console.error('Live search error:', err);
+        }
+      }, 250);
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!dropdown.contains(e.target) && e.target !== searchBox) {
+        dropdown.style.display = 'none';
+      }
+    });
+
+    // Show/hide clear button as user types
+    searchBox.addEventListener('input', (e) => {
+      const clearBtn = document.getElementById('clearSearchBtn');
+      if (clearBtn) {
+        clearBtn.style.display = e.target.value.trim() ? 'flex' : 'none';
+      }
+    });
+  }
+  
+  // Load initial stats
+  loadSchoolStats();
+});
+
+// ========== SEARCH FUNCTIONALITY ==========
+
+window.runQuery = async function() {
+  const school = document.getElementById("searchBox").value.trim();
+  const queryType = document.getElementById("queryType").value;
+  const summary = document.getElementById('universalSearchSummary');
+
+  // Hide summary for non-universal searches
+  if (summary) {
+    summary.style.display = 'none';
+  }
+
+  if (!school) {
+    showToast('Please enter a school name', 'error');
+    return;
+  }
+
+  // Show clear button
+  const clearBtn = document.getElementById('clearSearchBtn');
+  if (clearBtn) clearBtn.style.display = 'flex';
+
+  // If universal search is selected, use different endpoint
+  if (queryType === 'universal') {
+    performUniversalSearch(school);
+    return;
+  }
+
+  let url = "";
+  if (queryType === "all") url = `/api/schools?name=${encodeURIComponent(school)}`;
+  if (queryType === "subjects") url = `/api/schools/subjects?name=${encodeURIComponent(school)}`;
+  if (queryType === "ccas") url = `/api/schools/ccas?name=${encodeURIComponent(school)}`;
+  if (queryType === "programmes") url = `/api/schools/programmes?name=${encodeURIComponent(school)}`;
+  if (queryType === "distinctives") url = `/api/schools/distinctives?name=${encodeURIComponent(school)}`;
+
+  // Show loading spinner
+  showLoading(true);
+
+  try {
+    const response = await fetch(url, {
+      headers: getAuthHeaders()
+    });
+    
+    console.log('🔍 API Response status:', response.status);
+    
+    if (response.status === 401) {
+      // Token expired or invalid
+      localStorage.removeItem('authToken');
+      showToast('Session expired, please login again', 'error');
+      setTimeout(() => {
+        window.location.href = '/login?error=Session expired';
+      }, 1500);
+      return;
+    }
+    
+    const data = await response.json();
+    hideLoading();
+    
+    if (data.error) {
+      showToast(data.error, 'error');
+      renderEmpty('Error loading data');
+      updateResultsMeta(0, school);
+      return;
+    }
+    
+    renderTable(data, queryType);
+    updateResultsMeta(data.length, school);
+
+    // Show appropriate toast
+    if (data.length === 0) {
+      showToast('No results found', 'info');
+    } else {
+      showToast(`Found ${data.length} result(s)`, 'success');
+    }
+  } catch (err) {
+    hideLoading();
+    console.error('API call failed:', err);
+    showToast('Failed to fetch data: ' + err.message, 'error');
+    renderEmpty('Connection error');
+    updateResultsMeta(0, school);
+  }
+};
+
+// ========== UNIVERSAL SEARCH ==========
+
+async function performUniversalSearch(query) {
+  const loading = document.getElementById('loadingSpinner');
+  const results = document.getElementById('resultsTable');
+  const summary = document.getElementById('universalSearchSummary');
+  const meta = document.getElementById('resultsMeta');
+
+  // Hide summary initially
+  if (summary) summary.style.display = 'none';
+
+  // Show loading
+  loading.style.display = 'flex';
+  results.innerHTML = '';
+
+  try {
+    const response = await fetch(`/api/search/universal?query=${encodeURIComponent(query)}`, {
+      headers: getAuthHeaders()
+    });
+
+    if (response.status === 401) {
+      localStorage.removeItem('authToken');
+      showToast('Session expired, please login again', 'error');
+      setTimeout(() => {
+        window.location.href = '/login?error=Session expired';
+      }, 1500);
+      return;
+    }
+
+    const data = await response.json();
+    loading.style.display = 'none';
+
+    if (!data.success) {
+      showToast(data.message || 'Search failed', 'error');
+      renderEmpty('No results found');
+      meta.textContent = `No results found for "${query}"`;
+      return;
+    }
+
+    // Update summary
+    updateUniversalSearchSummary(data.results);
+
+    // Render results
+    renderUniversalSearchResults(data.results, query);
+
+    // Update meta
+    if (data.results.total === 0) {
+      meta.textContent = `No results found for "${query}"`;
+      showToast('No results found', 'info');
+    } else {
+      meta.textContent = `Found ${data.results.total} results across all categories for "${query}"`;
+      showToast(`Found ${data.results.total} results`, 'success');
+    }
+
+  } catch (error) {
+    loading.style.display = 'none';
+    console.error('Universal search error:', error);
+    showToast('Search failed: ' + error.message, 'error');
+    renderEmpty('Connection error');
+    meta.textContent = 'Search failed';
+  }
+}
+
+function updateUniversalSearchSummary(results) {
+  const summary = document.getElementById('universalSearchSummary');
+
+  if (!summary) return;
+
+  document.getElementById('totalResults').textContent = results.total;
+  document.getElementById('schoolResults').textContent = results.schools.length;
+  document.getElementById('subjectResults').textContent = results.subjects.length;
+  document.getElementById('ccaResults').textContent = results.ccas.length;
+  document.getElementById('programmeResults').textContent = results.programmes.length;
+  document.getElementById('distinctiveResults').textContent = results.distinctives.length;
+
+  summary.style.display = 'block';
+}
+
+function renderUniversalSearchResults(results, query) {
+  const container = document.getElementById('resultsTable');
+
+  if (results.total === 0) {
+    renderEmpty('No results found');
+    return;
+  }
+
+  let html = '<div class="universal-results">';
+
+  // Schools
+  if (results.schools.length > 0) {
+    html += renderCategory('schools', 'Schools', results.schools, query);
+  }
+
+  // Subjects
+  if (results.subjects.length > 0) {
+    html += renderCategory('subjects', 'Subjects', results.subjects, query);
+  }
+
+  // CCAs
+  if (results.ccas.length > 0) {
+    html += renderCategory('ccas', 'CCAs', results.ccas, query);
+  }
+
+  // Programmes
+  if (results.programmes.length > 0) {
+    html += renderCategory('programmes', 'Programmes', results.programmes, query);
+  }
+
+  // Distinctives
+  if (results.distinctives.length > 0) {
+    html += renderCategory('distinctives', 'Distinctive Programmes', results.distinctives, query);
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderCategory(type, title, items, query) {
+  const icons = {
+    schools: '<path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>',
+    subjects: '<path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/>',
+    ccas: '<path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/>',
+    programmes: '<path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"/>',
+    distinctives: '<path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>'
+  };
+  
+  let html = `
+    <div class="results-category">
+      <div class="category-header">
+        <div class="category-title">
+          <div class="category-icon ${type}">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+              ${icons[type]}
+            </svg>
+          </div>
+          <h3>${title}</h3>
+        </div>
+        <span class="category-count">${items.length} result${items.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div class="results-list">
+  `;
+  
+  items.forEach(item => {
+    const itemHtml = renderResultItem(type, item, query);
+    if (itemHtml) {
+      html += itemHtml;
+    }
+  });
+  
+  html += '</div></div>';
+  return html;
+}
+
+function renderResultItem(type, item, query) {
+  console.log('Rendering item:', type, item);
+  
+  let itemId;
+  if (type === 'schools') {
+    itemId = item.school_id || item.id;
+  } else {
+    itemId = item.school_id;
+  }
+  
+  console.log('Item ID:', itemId);
+  
+  if (!itemId) {
+    console.warn('No valid ID for item:', item);
+    return '';
+  }
+  
+  let html = `<div class="result-item" onclick='viewItemDetails("schools", ${itemId})'>`;
+  html += '<div class="result-item-header">';
+  
+  const name = item.name || item.school_name || item.subject_desc || item.cca_generic_name || item.moe_programme_desc || 'Unnamed';
+  const highlightedName = highlightSearchTerm(name, query);
+  html += `<div class="result-item-title">${highlightedName}</div>`;
+  
+  html += '</div>';
+  
+  if (item.description) {
+    const truncatedDesc = item.description.length > 150 
+      ? item.description.substring(0, 150) + '...'
+      : item.description;
+    html += `<div class="result-item-description">${truncatedDesc}</div>`;
+  }
+  
+  html += '<div class="result-item-meta">';
+  
+  if (type === 'schools') {
+    if (item.zone_code) {
+      html += `<span class="meta-tag zone-${item.zone_code.toLowerCase()}">${item.zone_code}</span>`;
+    }
+    if (item.mainlevel_code) {
+      html += `<span class="meta-tag">${item.mainlevel_code}</span>`;
+    }
+    if (item.principal_name) {
+      html += `<span class="meta-tag">
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/>
+        </svg>
+        ${item.principal_name}
+      </span>`;
+    }
+  } else {
+    if (item.zone_code) {
+      html += `<span class="meta-tag zone-${item.zone_code.toLowerCase()}">${item.zone_code}</span>`;
+    }
+    if (item.mainlevel_code) {
+      html += `<span class="meta-tag">${item.mainlevel_code}</span>`;
+    }
+  }
+  
+  html += '</div>';
+  html += '</div>';
+  
+  return html;
+}
+
+function highlightSearchTerm(text, searchTerm) {
+  if (!text || !searchTerm) return text;
+
+  const regex = new RegExp(`(${searchTerm})`, 'gi');
+  return text.replace(regex, '<mark>$1</mark>');
+}
+
+// ========== DETAILS MODAL ==========
+
+window.viewItemDetails = async function(type, id) {
+  console.log('Viewing details for:', type, id);
+  
+  if (!id) {
+    showToast('Invalid item ID', 'error');
+    return;
+  }
+  
+  showToast('Loading details...', 'info');
+  
+  try {
+    let response;
+    
+    if (type === 'schools') {
+      response = await fetch(`/api/schools/${id}/details`, {
+        headers: getAuthHeaders()
+      });
+    } else if (type === 'ccas' || type === 'subjects' || type === 'programmes' || type === 'distinctives') {
+      response = await fetch(`/api/schools/${id}/details`, {
+        headers: getAuthHeaders()
+      });
+    } else {
+      response = await fetch(`/api/search/details/${type}/${id}`, {
+        headers: getAuthHeaders()
+      });
+    }
+    
+    if (response.status === 401) {
+      localStorage.removeItem('authToken');
+      showToast('Session expired, please login again', 'error');
+      setTimeout(() => {
+        window.location.href = '/login?error=Session expired';
+      }, 1500);
+      return;
+    }
+    
+    const data = await response.json();
+    
+    if (!data.success) {
+      showToast(data.error || 'Failed to load details', 'error');
+      return;
+    }
+    
+    const itemData = data.school || data.data;
+    displayItemDetailsModal(type, itemData);
+    
+  } catch (error) {
+    console.error('Error loading details:', error);
+    showToast('Failed to load details: ' + error.message, 'error');
+  }
+};
+
+function displayItemDetailsModal(type, data) {
+  let html = '<div class="modal active" id="detailsModal">';
+  html += '<div class="modal-overlay" onclick="closeDetailsModal()"></div>';
+  html += '<div class="modal-content">';
+  html += '<div class="modal-header">';
+  html += `<h3>${getTypeTitle(type)} Details</h3>`;
+  html += '<button class="modal-close" onclick="closeDetailsModal()">×</button>';
+  html += '</div>';
+  html += '<div class="detail-modal-content">';
+  
+  html += renderSchoolDetails(data);
+  
+  html += '</div>';
+  html += '</div>';
+  html += '</div>';
+  
+  document.body.insertAdjacentHTML('beforeend', html);
+  document.body.style.overflow = 'hidden';
+}
+
+window.closeDetailsModal = function () {
+  const modal = document.getElementById('detailsModal');
+  if (modal) {
+    modal.remove();
+    document.body.style.overflow = 'auto';
+  }
+};
+
+function renderSchoolDetails(school) {
+  if (!school) {
+    return '<div class="detail-header"><p>No data available</p></div>';
+  }
+  
+  let html = `
+    <div class="detail-header">
+      <h4 class="detail-title">${school.school_name || 'Unknown School'}</h4>
+      <div class="detail-grid">
+  `;
+  
+  if (school.address) {
+    html += `<div class="detail-row"><strong>Address:</strong> <span>${school.address}</span></div>`;
+  }
+  if (school.postal_code) {
+    html += `<div class="detail-row"><strong>Postal Code:</strong> <span>${school.postal_code}</span></div>`;
+  }
+  if (school.zone_code) {
+    html += `<div class="detail-row"><strong>Zone:</strong> <span class="meta-tag zone-${school.zone_code.toLowerCase()}">${school.zone_code}</span></div>`;
+  }
+  if (school.mainlevel_code) {
+    html += `<div class="detail-row"><strong>Level:</strong> <span>${school.mainlevel_code}</span></div>`;
+  }
+  
+  if (school.principal_name) {
+    html += `<div class="detail-row"><strong>Principal:</strong> <span>${school.principal_name}</span></div>`;
+  }
+  if (school.first_vp_name) {
+    html += `<div class="detail-row"><strong>Vice Principal:</strong> <span>${school.first_vp_name}</span></div>`;
+  }
+  
+  if (school.email_address) {
+    html += `<div class="detail-row"><strong>Email:</strong> <span>${school.email_address}</span></div>`;
+  }
+  if (school.telephone_no) {
+    html += `<div class="detail-row"><strong>Phone:</strong> <span>${school.telephone_no}</span></div>`;
+  }
+  
+  if (school.type_code) {
+    html += `<div class="detail-row"><strong>Type:</strong> <span>${school.type_code}</span></div>`;
+  }
+  if (school.nature_code) {
+    html += `<div class="detail-row"><strong>Nature:</strong> <span>${school.nature_code}</span></div>`;
+  }
+  
+  const indicators = [];
+  if (school.autonomous_ind === 'Yes') indicators.push('Autonomous');
+  if (school.gifted_ind === 'Yes') indicators.push('Gifted');
+  if (school.ip_ind === 'Yes') indicators.push('IP');
+  if (school.sap_ind === 'Yes') indicators.push('SAP');
+  
+  if (indicators.length > 0) {
+    html += `<div class="detail-row"><strong>Programmes:</strong> <span>${indicators.join(', ')}</span></div>`;
+  }
+  
+  if (school.mrt_desc) {
+    html += `<div class="detail-row"><strong>MRT:</strong> <span>${school.mrt_desc}</span></div>`;
+  }
+  if (school.bus_desc) {
+    const busDesc = school.bus_desc.length > 100 
+      ? school.bus_desc.substring(0, 100) + '...' 
+      : school.bus_desc;
+    html += `<div class="detail-row"><strong>Bus Services:</strong> <span>${busDesc}</span></div>`;
+  }
+  
+  html += `</div></div>`;
+  
+  html += `
+    <div class="detail-stats">
+      <div class="detail-stat-item">
+        <div class="detail-stat-label">Subjects</div>
+        <div class="detail-stat-value">${school.subject_count || 0}</div>
+      </div>
+      <div class="detail-stat-item">
+        <div class="detail-stat-label">CCAs</div>
+        <div class="detail-stat-value">${school.cca_count || 0}</div>
+      </div>
+      <div class="detail-stat-item">
+        <div class="detail-stat-label">Programmes</div>
+        <div class="detail-stat-value">${school.programme_count || 0}</div>
+      </div>
+      <div class="detail-stat-item">
+        <div class="detail-stat-label">Distinctives</div>
+        <div class="detail-stat-value">${school.distinctive_count || 0}</div>
+      </div>
+    </div>
+  `;
+  
+  return html;
+}
+
+function getTypeTitle(type) {
+  const titles = {
+    school: 'School',
+    subject: 'Subject',
+    cca: 'CCA',
+    programme: 'Programme',
+    distinctive: 'Distinctive Programme'
+  };
+  return titles[type] || type;
+}
+
+// ========== CLEAR SEARCH ==========
+
+window.clearSearch = function () {
+  const searchBox = document.getElementById('searchBox');
+  const clearBtn = document.getElementById('clearSearchBtn');
+  const summary = document.getElementById('universalSearchSummary');
+  const results = document.getElementById('resultsTable');
+  const meta = document.getElementById('resultsMeta');
+
+  searchBox.value = '';
+  if (clearBtn) clearBtn.style.display = 'none';
+  if (summary) summary.style.display = 'none';
+  if (meta) meta.textContent = '';
+
+  results.innerHTML = `
+    <div class="empty-state">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+        <circle cx="32" cy="32" r="30" stroke="#E5E7EB" stroke-width="4"/>
+        <path d="M32 20v24M20 32h24" stroke="#E5E7EB" stroke-width="4" stroke-linecap="round"/>
+      </svg>
+      <h3>No search performed yet</h3>
+      <p>Try searching for a school name, subject, CCA, or programme</p>
+    </div>
+  `;
+
+  searchBox.focus();
+};
+
+// ========== TABLE RENDERING ==========
+
+function renderTable(data, queryType) {
+  const container = document.getElementById("resultsTable");
+  
+  if (!data || !Array.isArray(data) || data.length === 0) {
+    renderEmpty('No results found');
+    return;
+  }
+
+  let html = '<div style="overflow-x: auto;"><table class="data-table"><thead><tr>';
+  
+  if (queryType === 'all') {
+    const keys = Object.keys(data[0]);
+    keys.forEach(k => {
+      const formattedKey = k.split('_').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+      ).join(' ');
+      html += `<th>${formattedKey}</th>`;
+    });
+    // Add actions column only if user is admin
+    if (isUserAdmin()) {
+      html += '<th>Actions</th>';
+    }
+  } else if (queryType === 'subjects') {
+    html += '<th>School Name</th>';
+    html += '<th>Zone Code</th>';
+    html += '<th>Level</th>';
+    html += '<th>Subject</th>';
+  } else if (queryType === 'ccas') {
+    html += '<th>School Name</th>';
+    html += '<th>Zone Code</th>';
+    html += '<th>Level</th>';
+    html += '<th>CCA</th>';
+  } else if (queryType === 'programmes') {
+    html += '<th>School Name</th>';
+    html += '<th>Zone Code</th>';
+    html += '<th>Level</th>';
+    html += '<th>Programme</th>';
+  } else if (queryType === 'distinctives') {
+    html += '<th>School Name</th>';
+    html += '<th>Zone Code</th>';
+    html += '<th>Level</th>';
+    html += '<th>Distinctive Programme</th>';
+  }
+  
+  html += '</tr></thead><tbody>';
+
+  data.forEach(row => {
+    if (queryType === 'all') {
+      html += '<tr>';
+      const keys = Object.keys(data[0]);
+      keys.forEach(k => {
+        let value = row[k];
+        if (value === null || value === undefined || value === '' || 
+            String(value).toUpperCase() === 'NA' || 
+            String(value).toUpperCase() === 'N/A') {
+          value = '-';
+        }
+        html += `<td>${value}</td>`;
+      });
+      
+      // Add action buttons only if user is admin
+      if (row.school_id && isUserAdmin()) {
+        html += `
+          <td>
+            <div class="action-buttons">
+              <button class="btn-edit" onclick='editSchool(${JSON.stringify(row).replace(/'/g, "&apos;")})'>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                </svg>
+                Edit
+              </button>
+              <button class="btn-danger" onclick='deleteSchool(${row.school_id}, "${row.school_name.replace(/'/g, "&apos;")}")'>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                </svg>
+                Delete
+              </button>
+            </div>
+          </td>
+        `;
+      }
+      html += '</tr>';
+    } else {
+      html += `<tr data-clickable="true" onclick='viewItemDetails("schools", "${row.school_id}")' style="cursor: pointer;">`;
+      
+      if (queryType === 'subjects') {
+        html += `<td><strong>${row.school_name || '-'}</strong></td>`;
+        html += `<td><span class="badge">${row.zone_code || '-'}</span></td>`;
+        html += `<td>${row.mainlevel_code || '-'}</td>`;
+        html += `<td>${row.subject_desc || '-'}</td>`;
+      } else if (queryType === 'ccas') {
+        html += `<td><strong>${row.school_name || '-'}</strong></td>`;
+        html += `<td><span class="badge">${row.zone_code || '-'}</span></td>`;
+        html += `<td>${row.mainlevel_code || '-'}</td>`;
+        html += `<td>${row.cca_generic_name || '-'}</td>`;
+      } else if (queryType === 'programmes') {
+        html += `<td><strong>${row.school_name || '-'}</strong></td>`;
+        html += `<td><span class="badge">${row.zone_code || '-'}</span></td>`;
+        html += `<td>${row.mainlevel_code || '-'}</td>`;
+        html += `<td>${row.moe_programme_desc || '-'}</td>`;
+      } else if (queryType === 'distinctives') {
+        html += `<td><strong>${row.school_name || '-'}</strong></td>`;
+        html += `<td><span class="badge">${row.zone_code || '-'}</span></td>`;
+        html += `<td>${row.mainlevel_code || '-'}</td>`;
+        html += `<td>${row.distinctive_name || row.alp_title || row.llp_title || '-'}</td>`;
+      }
+      
+      html += '</tr>';
+    }
+  });
+
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+}
+
+// ========== CRUD OPERATIONS ==========
+
+// Modal Management
+window.showAddModal = function() {
+  // Check if user is admin before showing modal
+  if (!isUserAdmin()) {
+    showToast('Admin privileges required to add schools', 'error');
+    return;
+  }
+  
+  console.log('Opening add modal');
+  const modal = document.getElementById('addModal');
+  if (modal) {
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  } else {
+    console.error('Modal not found');
+  }
+};
+
+window.hideAddModal = function() {
+  console.log('Closing add modal');
+  const modal = document.getElementById('addModal');
+  if (modal) {
+    modal.classList.remove('active');
+    document.getElementById('addSchoolForm').reset();
+    document.body.style.overflow = 'auto';
+  }
+};
+
+// Edit Modal Management
+window.showEditModal = function (school) {
+  // Check if user is admin
+  if (!isUserAdmin()) {
+    showToast('Admin privileges required to edit schools', 'error');
+    return;
+  }
+  
+  console.log('Opening edit modal for school:', school);
+  const modal = document.getElementById('editModal');
+  if (modal) {
+    document.getElementById('editSchoolId').value = school.school_id;
+    document.getElementById('editSchoolName').value = school.school_name;
+    document.getElementById('editAddress').value = school.address;
+    document.getElementById('editPostalCode').value = school.postal_code;
+    document.getElementById('editZoneCode').value = school.zone_code;
+    document.getElementById('editMainlevelCode').value = school.mainlevel_code;
+    document.getElementById('editPrincipalName').value = school.principal_name;
+
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  } else {
+    console.error('Edit modal not found');
+  }
+};
+
+window.hideEditModal = function () {
+  console.log('Closing edit modal');
+  const modal = document.getElementById('editModal');
+  if (modal) {
+    modal.classList.remove('active');
+    document.getElementById('editSchoolForm').reset();
+    document.body.style.overflow = 'auto';
+  }
+};
+
+// Delete Modal Management
+window.showDeleteModal = function (schoolId, schoolName) {
+  // Check if user is admin
+  if (!isUserAdmin()) {
+    showToast('Admin privileges required to delete schools', 'error');
+    return;
+  }
+  
+  console.log('Opening delete modal for:', schoolName);
+  const modal = document.getElementById('deleteModal');
+  if (modal) {
+    pendingDeleteId = schoolId;
+    pendingDeleteName = schoolName;
+
+    document.getElementById('deleteSchoolName').textContent = schoolName;
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+};
+
+window.hideDeleteModal = function () {
+  console.log('Closing delete modal');
+  const modal = document.getElementById('deleteModal');
+  if (modal) {
+    modal.classList.remove('active');
+    pendingDeleteId = null;
+    pendingDeleteName = null;
+    document.body.style.overflow = 'auto';
+  }
+};
+
+// Create Operation
+window.addSchool = async function(event) {
+  event.preventDefault();
+  
+  // Check if user is admin
+  if (!isUserAdmin()) {
+    showToast('Admin privileges required to add schools', 'error');
+    return;
+  }
+  
+  console.log('Adding school...');
+  
+  const schoolData = {
+    school_name: document.getElementById('schoolName').value,
+    address: document.getElementById('address').value,
+    postal_code: document.getElementById('postalCode').value,
+    zone_code: document.getElementById('zoneCode').value,
+    mainlevel_code: document.getElementById('mainlevelCode').value,
+    principal_name: document.getElementById('principalName').value
+  };
+  
+  console.log('School data:', schoolData);
+  
+  try {
+    const res = await fetch('/api/schools', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(schoolData)
+    });
+    
+    if (res.status === 403) {
+      showToast('Admin privileges required to add schools', 'error');
+      return;
+    }
+    
+    const result = await res.json();
+    console.log('Server response:', result);
+    
+    if (result.success || res.ok) {
+      showToast('✓ School added successfully!', 'success');
+      hideAddModal();
+      loadSchoolStats();
+      
+      // If user is on search view with results, refresh
+      const searchBox = document.getElementById('searchBox');
+      if (searchBox.value.trim()) {
+        setTimeout(() => runQuery(), 500);
+      }
+    } else {
+      showToast('Error: ' + (result.error || 'Failed to add school'), 'error');
+    }
+  } catch (err) {
+    console.error('Add school error:', err);
+    showToast('Error: ' + err.message, 'error');
+  }
+};
+
+// Edit/Update Operation - Now uses modal
+window.editSchool = function (school) {
+  console.log('Edit school clicked:', school);
+  showEditModal(school);
+};
+
+// Update Operation (form submission)
+window.updateSchool = async function (event) {
+  event.preventDefault();
+  
+  // Check if user is admin
+  if (!isUserAdmin()) {
+    showToast('Admin privileges required to edit schools', 'error');
+    return;
+  }
+  
+  console.log('Updating school...');
+
+  const schoolId = document.getElementById('editSchoolId').value;
+  const updatedData = {
+    school_name: document.getElementById('editSchoolName').value,
+    address: document.getElementById('editAddress').value,
+    postal_code: document.getElementById('editPostalCode').value,
+    zone_code: document.getElementById('editZoneCode').value,
+    mainlevel_code: document.getElementById('editMainlevelCode').value,
+    principal_name: document.getElementById('editPrincipalName').value
+  };
+
+  console.log('Updated data:', updatedData);
+
+  try {
+    const res = await fetch(`/api/schools/${schoolId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(updatedData)
+    });
+
+    if (res.status === 403) {
+      showToast('Admin privileges required to edit schools', 'error');
+      return;
+    }
+
+    const result = await res.json();
+
+    if (result.success || res.ok) {
+      showToast('✓ School updated successfully!', 'success');
+      hideEditModal();
+      runQuery(); // Refresh results
+    } else {
+      showToast('Error: ' + (result.error || 'Failed to update school'), 'error');
+    }
+  } catch (err) {
+    console.error('Update school error:', err);
+    showToast('Error: ' + err.message, 'error');
+  }
+};
+
+// Delete Operation - Now uses modal
+window.deleteSchool = function (schoolId, schoolName) {
+  console.log('Delete school clicked:', schoolId, schoolName);
+  showDeleteModal(schoolId, schoolName);
+};
+
+// Confirm Delete Operation
+window.confirmDelete = async function () {
+  // Check if user is admin
+  if (!isUserAdmin()) {
+    showToast('Admin privileges required to delete schools', 'error');
+    return;
+  }
+  
+  console.log('Confirming delete for:', pendingDeleteId, pendingDeleteName);
+
+  if (!pendingDeleteId) return;
+
+  try {
+    const res = await fetch(`/api/schools/${pendingDeleteId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+
+    if (res.status === 403) {
+      showToast('Admin privileges required to delete schools', 'error');
+      return;
+    }
+
+    const result = await res.json();
+
+    if (result.success || res.ok) {
+      showToast('✓ School deleted successfully!', 'success');
+      hideDeleteModal();
+      runQuery(); // Refresh results
+      loadSchoolStats();
+    } else {
+      showToast('Error: ' + (result.error || 'Failed to delete school'), 'error');
+    }
+  } catch (err) {
+    console.error('Delete school error:', err);
+    showToast('Error: ' + err.message, 'error');
+  }
+};
+
+// ========== UTILITY FUNCTIONS ==========
+
+function showLoading(show) {
+  const spinner = document.getElementById('loadingSpinner');
+  const resultsTable = document.getElementById('resultsTable');
+  
+  if (show) {
+    spinner.style.display = 'flex';
+    resultsTable.innerHTML = '';
+  } else {
+    spinner.style.display = 'none';
+  }
+}
+
+function hideLoading() {
+  showLoading(false);
+}
+
+function updateResultsMeta(count, query) {
+  const meta = document.getElementById('resultsMeta');
+  const queryType = document.getElementById('queryType').value;
+
+  if (!count || count === 0) {
+    meta.textContent = `No results found for "${query}"`;
+  } else {
+    const typeLabel = {
+      'all': 'school(s)',
+      'subjects': 'subject result(s)',
+      'ccas': 'CCA result(s)',
+      'programmes': 'programme result(s)',
+      'distinctives': 'distinctive programme result(s)',
+      'universal': 'result(s)'
+    }[queryType] || 'result(s)';
+
+    meta.textContent = `Found ${count} ${typeLabel} matching "${query}"`;
+  }
+}
+
+function renderEmpty(message) {
+  document.getElementById("resultsTable").innerHTML = `
+    <div class="empty-state">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+        <circle cx="32" cy="32" r="30" stroke="#E5E7EB" stroke-width="4"/>
+        <path d="M32 20v24M20 32h24" stroke="#E5E7EB" stroke-width="4" stroke-linecap="round"/>
+      </svg>
+      <h3>${message}</h3>
+      <p>Try adjusting your search query</p>
+    </div>
+  `;
+}
+
+// ========== STATISTICS ==========
+
+function loadSchoolStats() {
+  console.log('Loading school stats...');
+  
+  fetch('/api/schools?name=', {
+    headers: getAuthHeaders()
+  })
+    .then(res => res.json())
+    .then(data => {
+      const totalSchools = document.getElementById('totalSchools');
+      if (totalSchools) {
+        totalSchools.textContent = data.length || '0';
+      }
+      console.log('Total schools:', data.length);
+    })
+    .catch(err => {
+      console.error('Failed to load stats:', err);
+      const totalSchools = document.getElementById('totalSchools');
+      if (totalSchools) {
+        totalSchools.textContent = '-';
+      }
+    });
+}
+
+// ========== TOAST NOTIFICATIONS ==========
+
+function showToast(message, type = 'info') {
+  console.log('Toast:', type, message);
+  const toast = document.getElementById('toast');
+  const toastMessage = document.getElementById('toastMessage');
+  
+  if (!toast || !toastMessage) {
+    console.error('Toast elements not found');
+    return;
+  }
+  
+  toastMessage.textContent = message;
+  toast.className = 'toast show ' + type;
+  
+  setTimeout(() => {
+    toast.classList.remove('show');
+  }, 3000);
+}
+
+// ========== UTILITY FUNCTIONS (GLOBAL) ==========
+
+window.showAbout = function() {
+  alert(
+    'EduQuery SG\n\n' +
+    'A comprehensive database management system for Singapore schools.\n\n' +
+    'Features:\n' +
+    '• Search schools by name\n' +
+    '• View subjects, CCAs, programmes & distinctives\n' +
+    '• Add, edit, and delete school records\n' +
+    '• Real-time data synchronization\n\n' +
+    'Built with PostgreSQL (Supabase) + MongoDB Atlas\n' +
+    'INF2003 Database Systems Project'
+  );
+};
+
+window.showHelp = function() {
+  alert(
+    'How to Use EduQuery\n\n' +
+    'SEARCH:\n' +
+    '1. Enter a school name (partial match works)\n' +
+    '2. Select what you want to view\n' +
+    '3. Click Search or press Enter\n\n' +
+    'MANAGE:\n' +
+    '1. Click "Add New School" button\n' +
+    '2. Fill in all required fields\n' +
+    '3. Click Save to add to database\n\n' +
+    'EDIT/DELETE:\n' +
+    '1. Search for schools (General Info)\n' +
+    '2. Use Edit or Delete buttons in the results table\n\n' +
+    'Need more help? Contact your database administrator.'
+  );
+};
+
+// ========== USER RELATED FUNCTIONS ==========
+
+window.logout = function() {
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    const username = userData.username || 'Unknown';
+    
+    console.log('Logout initiated:', {
+        timestamp: new Date().toISOString(),
+        username: username,
+        user_id: userData.user_id
+    });
+
+    const confirmed = confirm(
+        `Are you sure you want to log out?\n\n` +
+        `User: ${username}\n` +
+        `Role: ${userData.is_admin ? 'Administrator' : 'User'}`
+    );
+    
+    if (!confirmed) {
+        console.log('Logout cancelled by user');
+        return;
+    }
+
+    // Clear all stored authentication data
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('username');
+    localStorage.removeItem('userData');
+    localStorage.removeItem('is_admin');
+
+    showToast(`Goodbye, ${username}! You have been logged out successfully.`, 'info');
+
+    console.log('User logged out successfully:', {
+        timestamp: new Date().toISOString(),
+        username: username
+    });
+
+    // Redirect to login page after a brief delay
+    setTimeout(() => {
+        window.location.href = '/login';
+    }, 1000);
+};
+
+console.log('✓ All functions loaded and registered globally');
