@@ -117,10 +117,6 @@ body {
   color: var(--primary);
 }
 
-.nav-btn.hidden {
-  display: none !important;
-}
-
 /* ========== Views ========== */
 .view {
   display: none;
@@ -1666,7 +1662,8 @@ body {
   }
 }
 
-/* ========== Login ==========*/
+/* ========== ENHANCED LOGIN STYLES ========== */
+
 /* Login Form Styles */
 .login-form {
   padding: 1.5rem;
@@ -1706,6 +1703,7 @@ body {
   border-color: #EF4444;
 }
 
+/* Error Message Display */
 .error-message {
   background: #FEF2F2;
   border: 1px solid #FECACA;
@@ -1716,6 +1714,7 @@ body {
   margin-bottom: 1rem;
 }
 
+/* Loading Button States */
 .btn-loading {
   display: none;
 }
@@ -1727,9 +1726,13 @@ body {
 .btn-text.hide {
   display: none;
 }
+
+/* Admin Login Modal Sizing */
 .admin-login-modal {
-    max-width: 400px;
+  max-width: 400px;
 }
-.adminAuthLink{
+
+/* Admin Auth Link */
+.adminAuthLink {
   font-weight: bold;
 }
