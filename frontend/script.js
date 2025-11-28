@@ -5,85 +5,85 @@ let pendingDeleteName = null;
 
 // Function to get token from localStorage (admin only)
 function getAuthToken() {
-    const tokenFromStorage = localStorage.getItem('authToken');
-    if (tokenFromStorage) {
-        console.log('🔑 Admin token found in localStorage');
-        return tokenFromStorage;
-    }
-      
-    console.log('ℹ️ No admin token found - public access mode');
-    return null;
+  const tokenFromStorage = localStorage.getItem('authToken');
+  if (tokenFromStorage) {
+    console.log('🔑 Admin token found in localStorage');
+    return tokenFromStorage;
+  }
+
+  console.log('ℹ️ No admin token found - public access mode');
+  return null;
 }
 
 // Function to validate admin token
 function validateAuth() {
-    const token = getAuthToken();
-    
-    if (!token) {
-        console.log('No admin token found - public access mode');
-        updateUIForUserRole(); // Update UI for public access
-        return true; // Allow public access
+  const token = getAuthToken();
+
+  if (!token) {
+    console.log('No admin token found - public access mode');
+    updateUIForUserRole(); // Update UI for public access
+    return true; // Allow public access
+  }
+
+  // Verify token is valid JWT format and is admin
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const expiry = payload.exp * 1000; // Convert to milliseconds
+    const now = Date.now();
+
+    console.log('🔍 Token payload:', payload);
+    console.log('⏰ Token expires:', new Date(expiry).toLocaleString());
+
+    if (now > expiry) {
+      console.log('Admin token expired, switching to public access');
+      localStorage.removeItem('authToken');
+      showToast('Admin session expired, continuing in public mode', 'info');
+      updateUIForUserRole(); // Update UI for public access
+      return true; // Allow public access
     }
-    
-    // Verify token is valid JWT format and is admin
-    try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        const expiry = payload.exp * 1000; // Convert to milliseconds
-        const now = Date.now();
-        
-        console.log('🔍 Token payload:', payload);
-        console.log('⏰ Token expires:', new Date(expiry).toLocaleString());
-        
-        if (now > expiry) {
-            console.log('Admin token expired, switching to public access');
-            localStorage.removeItem('authToken');
-            showToast('Admin session expired, continuing in public mode', 'info');
-            updateUIForUserRole(); // Update UI for public access
-            return true; // Allow public access
-        }
-        
-        // Check if user is actually admin
-        if (!payload.is_admin) {
-            console.log('Non-admin token detected, removing and switching to public access');
-            localStorage.removeItem('authToken');
-            showToast('Admin access required, continuing in public mode', 'info');
-            updateUIForUserRole(); // Update UI for public access
-            return true; // Allow public access
-        }
-        
-        console.log('✅ Admin token is valid');
-        return true;
-    } catch (error) {
-        console.log('Invalid token format, switching to public access');
-        localStorage.removeItem('authToken');
-        showToast('Invalid admin session, continuing in public mode', 'info');
-        updateUIForUserRole(); // Update UI for public access
-        return true; // Allow public access
+
+    // Check if user is actually admin
+    if (!payload.is_admin) {
+      console.log('Non-admin token detected, removing and switching to public access');
+      localStorage.removeItem('authToken');
+      showToast('Admin access required, continuing in public mode', 'info');
+      updateUIForUserRole(); // Update UI for public access
+      return true; // Allow public access
     }
+
+    console.log('✅ Admin token is valid');
+    return true;
+  } catch (error) {
+    console.log('Invalid token format, switching to public access');
+    localStorage.removeItem('authToken');
+    showToast('Invalid admin session, continuing in public mode', 'info');
+    updateUIForUserRole(); // Update UI for public access
+    return true; // Allow public access
+  }
 }
 
 // Function to get auth headers for API calls (admin only for protected routes)
 function getAuthHeaders() {
-    const token = getAuthToken();
-    
-    if (!token) {
-        console.log('No admin token available for API call - using public access');
-        return {
-            'Content-Type': 'application/json'
-        };
-    }
-    
+  const token = getAuthToken();
+
+  if (!token) {
+    console.log('No admin token available for API call - using public access');
     return {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
+      'Content-Type': 'application/json'
     };
+  }
+
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  };
 }
 
 // Check if current user is admin
 function isUserAdmin() {
   const token = getAuthToken();
   if (!token) return false;
-  
+
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
     return payload.is_admin === true;
@@ -96,7 +96,7 @@ function isUserAdmin() {
 function getCurrentUsername() {
   const token = getAuthToken();
   if (!token) return null;
-  
+
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
     return payload.username || null;
@@ -109,9 +109,9 @@ function getCurrentUsername() {
 function updateUIForUserRole() {
   const isAdmin = isUserAdmin();
   const username = getCurrentUsername();
-  
+
   console.log('Admin role update:', { username: username, isAdmin: isAdmin });
-  
+
   // Update welcome message
   const welcomeElement = document.getElementById('userWelcome');
   if (welcomeElement) {
@@ -123,7 +123,7 @@ function updateUIForUserRole() {
       welcomeElement.className = 'public-welcome';
     }
   }
-  
+
   // Show/hide admin features
   const adminFeatures = document.querySelectorAll('.admin-only');
   adminFeatures.forEach(feature => {
@@ -131,19 +131,19 @@ function updateUIForUserRole() {
       feature.style.display = isAdmin ? 'block' : 'none';
     }
   });
-  
+
   // Show/hide Manage and Analytics navigation buttons for admin only
   const manageNav = document.querySelector('[data-view="manage"]');
   const analyticsNav = document.querySelector('[data-view="analytics"]');
-  
+
   if (manageNav) {
     manageNav.style.display = isAdmin ? 'flex' : 'none';
   }
-  
+
   if (analyticsNav) {
     analyticsNav.style.display = isAdmin ? 'flex' : 'none';
   }
-  
+
   // Update admin auth link
   updateAdminAuthLink();
 }
@@ -166,54 +166,54 @@ function updateAdminAuthLink() {
 
 // ========== Admin Authentication Handler ==========
 function handleAdminAuth() {
-    if (isUserAdmin()) {
-        // User is already admin, show logout confirmation
-        const username = getCurrentUsername();
-        const confirmed = confirm(
-            `Admin Logout\n\n` +
-            `Are you sure you want to log out?\n\n` +
-            `User: ${username}\n` +
-            `Role: Administrator`
-        );
-        
-        if (confirmed) {
-            adminLogout();
-        }
-    } else {
-      showAdminLoginModal();
+  if (isUserAdmin()) {
+    // User is already admin, show logout confirmation
+    const username = getCurrentUsername();
+    const confirmed = confirm(
+      `Admin Logout\n\n` +
+      `Are you sure you want to log out?\n\n` +
+      `User: ${username}\n` +
+      `Role: Administrator`
+    );
+
+    if (confirmed) {
+      adminLogout();
     }
+  } else {
+    showAdminLoginModal();
+  }
 }
 
 async function sendLoginRequest(username, password) {
-    try {
-        const response = await fetch('/login', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                username: username,
-                password: password
-            }),
-        });
+  try {
+    const response = await fetch('/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        username: username,
+        password: password
+      }),
+    });
 
-        if (!response.ok) {
-            let errorMsg = `Server responded with status: ${response.status}`;
-            try {
-                const errorData = await response.json();
-                errorMsg = errorData.message || errorMsg;
-            } catch (e) {
-                errorMsg = response.statusText || errorMsg;
-            }
-            throw new Error(errorMsg);
-        }
-
-        const data = await response.json();
-        return data;
-
-    } catch (error) {
-        throw error;
+    if (!response.ok) {
+      let errorMsg = `Server responded with status: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.message || errorMsg;
+      } catch (e) {
+        errorMsg = response.statusText || errorMsg;
+      }
+      throw new Error(errorMsg);
     }
+
+    const data = await response.json();
+    return data;
+
+  } catch (error) {
+    throw error;
+  }
 }
 
 async function handleAdminLogin(event) {
@@ -224,159 +224,159 @@ async function handleAdminLogin(event) {
 
   // Validate
   if (!username.trim()) {
-      showToast('Username is required', 'error');
-      return;
+    showToast('Username is required', 'error');
+    return;
   }
 
   if (!password.trim()) {
-      showToast('Password is required', 'error');
-      return;
+    showToast('Password is required', 'error');
+    return;
   }
 
   setLoginLoadingState(true);
 
   try {
-      const responseData = await sendLoginRequest(username, password);
-      
-      // Handle success
-      showToast('Login successful!', 'success');
-      
-      // Store the token and user data
-      if (responseData.token) {
-          localStorage.setItem('authToken', responseData.token);
-          localStorage.setItem('username', username);
-      }
-      if (responseData.user) {
-          localStorage.setItem('userData', JSON.stringify(responseData.user));
-      }
+    const responseData = await sendLoginRequest(username, password);
 
-      // Update UI
-      updateUIForUserRole();
+    // Handle success
+    showToast('Login successful!', 'success');
 
-      // Close modal
-      hideAdminLoginModal();
+    // Store the token and user data
+    if (responseData.token) {
+      localStorage.setItem('authToken', responseData.token);
+      localStorage.setItem('username', username);
+    }
+    if (responseData.user) {
+      localStorage.setItem('userData', JSON.stringify(responseData.user));
+    }
+
+    // Update UI
+    updateUIForUserRole();
+
+    // Close modal
+    hideAdminLoginModal();
 
   } catch (error) {
-      // Handle failure
-      let errorMsg = 'Login failed. Please try again.';
-      
-      if (error.message.includes('401') || error.message.toLowerCase().includes('invalid')) {
-          errorMsg = 'Invalid username or password';
-      } else if (error.message.includes('404')) {
-          errorMsg = 'Login service unavailable';
-      } else if (error.message.includes('500')) {
-          errorMsg = 'Server error. Please try again later.';
-      } else if (error.message.includes('Network') || error.message.includes('Failed to fetch')) {
-          errorMsg = 'Network error. Please check your connection.';
-      } else {
-          errorMsg = error.message;
-      }
+    // Handle failure
+    let errorMsg = 'Login failed. Please try again.';
 
-      showToast(errorMsg, 'error');
+    if (error.message.includes('401') || error.message.toLowerCase().includes('invalid')) {
+      errorMsg = 'Invalid username or password';
+    } else if (error.message.includes('404')) {
+      errorMsg = 'Login service unavailable';
+    } else if (error.message.includes('500')) {
+      errorMsg = 'Server error. Please try again later.';
+    } else if (error.message.includes('Network') || error.message.includes('Failed to fetch')) {
+      errorMsg = 'Network error. Please check your connection.';
+    } else {
+      errorMsg = error.message;
+    }
+
+    showToast(errorMsg, 'error');
   } finally {
-      setLoginLoadingState(false);
+    setLoginLoadingState(false);
   }
 }
 
 
 // ========== Admin Logout Function ==========
 function adminLogout() {
-    const username = getCurrentUsername();
-    
-    console.log('Admin logout initiated:', {
-        timestamp: new Date().toISOString(),
-        username: username
-    });
+  const username = getCurrentUsername();
 
-    // Clear all stored authentication data
-    localStorage.removeItem('authToken');
+  console.log('Admin logout initiated:', {
+    timestamp: new Date().toISOString(),
+    username: username
+  });
 
-    showToast(`Goodbye, ${username}! You have been logged out successfully.`, 'info');
+  // Clear all stored authentication data
+  localStorage.removeItem('authToken');
 
-    console.log('Admin logged out successfully:', {
-        timestamp: new Date().toISOString(),
-        username: username
-    });
+  showToast(`Goodbye, ${username}! You have been logged out successfully.`, 'info');
 
-    // Reload the page to update UI for public access
-    setTimeout(() => {
-        window.location.reload();
-    }, 1000);
+  console.log('Admin logged out successfully:', {
+    timestamp: new Date().toISOString(),
+    username: username
+  });
+
+  // Reload the page to update UI for public access
+  setTimeout(() => {
+    window.location.reload();
+  }, 1000);
 }
 
 // ========== Update Admin Auth Link Text ==========
 function updateAdminAuthLink() {
-    const authLink = document.getElementById('adminAuthLink');
-    if (!authLink) return;
+  const authLink = document.getElementById('adminAuthLink');
+  if (!authLink) return;
 
-    if (isUserAdmin()) {
-        authLink.textContent = 'Admin Logout';
-        authLink.style.fontWeight = '600';
-        authLink.style.color = '#EF4444'; // Red color for logout
-    } else {
-        authLink.textContent = 'Admin Login';
-        authLink.style.fontWeight = 'normal';
-        authLink.style.color = ''; // Reset to default color
-    }
+  if (isUserAdmin()) {
+    authLink.textContent = 'Admin Logout';
+    authLink.style.fontWeight = '600';
+    authLink.style.color = '#EF4444'; // Red color for logout
+  } else {
+    authLink.textContent = 'Admin Login';
+    authLink.style.fontWeight = 'normal';
+    authLink.style.color = ''; // Reset to default color
+  }
 }
 
 // ========== Check for Admin Token in URL ==========
 function checkForAdminToken() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const tokenFromUrl = urlParams.get('token');
-    
-    if (tokenFromUrl) {
-        console.log('🔑 Admin token found in URL');
-        
-        // Verify it's an admin token before storing
-        try {
-            const payload = JSON.parse(atob(tokenFromUrl.split('.')[1]));
-            if (payload.is_admin) {
-                // Store token from URL in localStorage
-                localStorage.setItem('authToken', tokenFromUrl);
-                
-                // Clean URL by removing token parameter
-                const newUrl = window.location.pathname;
-                window.history.replaceState({}, document.title, newUrl);
-                
-                // Show success message and reload to update UI
-                showToast('Admin login successful!', 'success');
-                setTimeout(() => {
-                    window.location.reload();
-                }, 1000);
-            } else {
-                console.log('Non-admin token in URL, ignoring');
-                showToast('Admin access required', 'error');
-            }
-        } catch (error) {
-            console.log('Invalid token in URL, ignoring');
-            showToast('Invalid admin token', 'error');
-        }
+  const urlParams = new URLSearchParams(window.location.search);
+  const tokenFromUrl = urlParams.get('token');
+
+  if (tokenFromUrl) {
+    console.log('🔑 Admin token found in URL');
+
+    // Verify it's an admin token before storing
+    try {
+      const payload = JSON.parse(atob(tokenFromUrl.split('.')[1]));
+      if (payload.is_admin) {
+        // Store token from URL in localStorage
+        localStorage.setItem('authToken', tokenFromUrl);
+
+        // Clean URL by removing token parameter
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+
+        // Show success message and reload to update UI
+        showToast('Admin login successful!', 'success');
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } else {
+        console.log('Non-admin token in URL, ignoring');
+        showToast('Admin access required', 'error');
+      }
+    } catch (error) {
+      console.log('Invalid token in URL, ignoring');
+      showToast('Invalid admin token', 'error');
     }
+  }
 }
 function showAdminLoginModal() {
-    const modal = document.getElementById('adminLoginModal');
-    if (modal) {
-        modal.classList.add('active');
-        document.body.style.overflow = 'hidden';
-    }
+  const modal = document.getElementById('adminLoginModal');
+  if (modal) {
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
 }
 
 function hideAdminLoginModal() {
-    const modal = document.getElementById('adminLoginModal');
-    if (modal) {
-        modal.classList.remove('active');
-        document.body.style.overflow = 'auto';
-        // Reset form
-        document.getElementById('adminLoginForm').reset();
-    }
+  const modal = document.getElementById('adminLoginModal');
+  if (modal) {
+    modal.classList.remove('active');
+    document.body.style.overflow = 'auto';
+    // Reset form
+    document.getElementById('adminLoginForm').reset();
+  }
 }
 // ========== ADMIN LOGIN MODAL FUNCTIONS ==========
 
 // Show admin login modal
-window.showAdminLoginModal = function() {
+window.showAdminLoginModal = function () {
   console.log('Opening admin login modal');
-  
+
   // Check if user is already admin
   if (isUserAdmin()) {
     const username = getCurrentUsername();
@@ -386,18 +386,18 @@ window.showAdminLoginModal = function() {
       `User: ${username}\n` +
       `Role: Administrator`
     );
-    
+
     if (confirmed) {
       adminLogout();
     }
     return;
   }
-  
+
   const modal = document.getElementById('adminLoginModal');
   if (modal) {
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
-    
+
     // Focus on username field
     setTimeout(() => {
       const usernameInput = document.getElementById('adminUsername');
@@ -411,26 +411,26 @@ window.showAdminLoginModal = function() {
 };
 
 // Hide admin login modal
-window.hideAdminLoginModal = function() {
+window.hideAdminLoginModal = function () {
   console.log('Closing admin login modal');
   const modal = document.getElementById('adminLoginModal');
   if (modal) {
     modal.classList.remove('active');
     document.body.style.overflow = 'auto';
-    
+
     // Reset form
     const form = document.getElementById('adminLoginForm');
     if (form) {
       form.reset();
     }
-    
+
     // Clear error message
     const errorElement = document.getElementById('adminLoginError');
     if (errorElement) {
       errorElement.style.display = 'none';
       errorElement.textContent = '';
     }
-    
+
     // Reset button state
     resetLoginButton();
   }
@@ -441,7 +441,7 @@ function setLoginLoadingState(isLoading) {
   const loginBtn = document.getElementById('adminLoginBtn');
   const btnText = loginBtn.querySelector('.btn-text');
   const btnLoading = loginBtn.querySelector('.btn-loading');
-  
+
   if (isLoading) {
     loginBtn.disabled = true;
     btnText.classList.add('hide');
@@ -471,7 +471,7 @@ function validateLoginForm(username, password) {
     document.getElementById('adminPassword').focus();
     return false;
   }
-  
+
   return true;
 }
 
@@ -527,7 +527,7 @@ async function sendAdminLoginRequest(username, password) {
     }
 
     const data = await response.json();
-    
+
     console.log('Admin login response received:', {
       timestamp: new Date().toISOString(),
       username: username,
@@ -549,7 +549,7 @@ async function sendAdminLoginRequest(username, password) {
 // Handle successful admin login
 function handleAdminLoginSuccess(responseData) {
   showToast('Admin login successful!', 'success');
-  
+
   // Log successful authentication
   console.log('Admin authentication successful:', {
     timestamp: new Date().toISOString(),
@@ -570,7 +570,7 @@ function handleAdminLoginSuccess(responseData) {
   // Close modal and update UI
   hideAdminLoginModal();
   updateUIForUserRole();
-  
+
   // Show success message
   setTimeout(() => {
     showToast(`Welcome, Administrator ${document.getElementById('adminUsername').value}!`, 'success');
@@ -580,7 +580,7 @@ function handleAdminLoginSuccess(responseData) {
 // Handle failed admin login
 function handleAdminLoginFailure(error) {
   let errorMsg = 'Login failed. Please try again.';
-  
+
   if (error.message.includes('401') || error.message.toLowerCase().includes('invalid')) {
     errorMsg = 'Invalid username or password';
   } else if (error.message.includes('404')) {
@@ -607,9 +607,9 @@ function handleAdminLoginFailure(error) {
 }
 
 // Main admin login form handler
-window.handleAdminLogin = async function(event) {
+window.handleAdminLogin = async function (event) {
   event.preventDefault();
-  
+
   const username = document.getElementById('adminUsername').value;
   const password = document.getElementById('adminPassword').value;
 
@@ -627,7 +627,7 @@ window.handleAdminLogin = async function(event) {
   try {
     // Send login request to server
     const responseData = await sendAdminLoginRequest(username, password);
-    
+
     // Handle successful login
     handleAdminLoginSuccess(responseData);
 
@@ -641,15 +641,15 @@ window.handleAdminLogin = async function(event) {
 };
 
 // Add event listener for the admin login form
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   const adminLoginForm = document.getElementById('adminLoginForm');
   if (adminLoginForm) {
     adminLoginForm.addEventListener('submit', handleAdminLogin);
-    
+
     // Add Enter key support for password field
     const passwordInput = document.getElementById('adminPassword');
     if (passwordInput) {
-      passwordInput.addEventListener('keypress', function(event) {
+      passwordInput.addEventListener('keypress', function (event) {
         if (event.key === 'Enter') {
           adminLoginForm.dispatchEvent(new Event('submit'));
         }
@@ -659,9 +659,9 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Enhanced admin logout function
-window.adminLogout = function() {
+window.adminLogout = function () {
   const username = getCurrentUsername();
-  
+
   console.log('Admin logout initiated:', {
     timestamp: new Date().toISOString(),
     username: username
@@ -691,8 +691,8 @@ window.switchView = function (viewName) {
 
   // Check if trying to access analytics without admin rights
   if (viewName === 'analytics' && !isUserAdmin()) {
-      showToast('Analytics features are available to administrators only', 'error');
-      return;
+    showToast('Analytics features are available to administrators only', 'error');
+    return;
   }
 
   const views = document.querySelectorAll('.view');
@@ -765,7 +765,7 @@ function loadAnalyticsData() {
   }
 
   console.log('Loading analytics data...');
-  
+
   // Load various analytics data
   loadZoneStatistics();
   loadSubjectDiversity();
@@ -835,7 +835,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Check for admin token in URL first
   checkForAdminToken();
-  
+
   // Check authentication (optional for public access)
   validateAuth();
 
@@ -853,17 +853,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // For the admin login
   const adminLoginForm = document.getElementById('adminLoginForm');
   if (adminLoginForm) {
-          adminLoginForm.addEventListener('submit', handleAdminLogin);
+    adminLoginForm.addEventListener('submit', handleAdminLogin);
   }
 
   // Add click event listener to admin auth link
   const adminAuthLink = document.getElementById('adminAuthLink');
   if (adminAuthLink) {
-      adminAuthLink.addEventListener('click', function(e) {
-          e.preventDefault();
-          handleAdminAuth();
-      });
-      console.log('Admin auth link event listener attached');
+    adminAuthLink.addEventListener('click', function (e) {
+      e.preventDefault();
+      handleAdminAuth();
+    });
+    console.log('Admin auth link event listener attached');
   }
 
   // Allow Enter key to trigger search
@@ -991,9 +991,9 @@ window.runQuery = async function () {
     const res = await fetch(url, {
       headers: getAuthHeaders()
     });
-    
+
     console.log('🔍 API Response status:', res.status); // FIXED: Changed response to res
-    
+
     const data = await res.json();
 
     hideLoading();
@@ -1093,12 +1093,12 @@ function renderTable(data, queryType) {
     // School search - show all school fields + actions (admin only)
     const keys = Object.keys(data[0]);
     keys.forEach(k => {
-      const formattedKey = k.split('_').map(word => 
+      const formattedKey = k.split('_').map(word =>
         word.charAt(0).toUpperCase() + word.slice(1)
       ).join(' ');
       html += `<th>${formattedKey}</th>`;
     });
-    
+
     // Add actions column only if user is admin
     if (isUserAdmin()) {
       html += '<th>Actions</th>';
@@ -1130,13 +1130,15 @@ function renderTable(data, queryType) {
   data.forEach(row => {
     if (queryType === 'all') {
       // Show all fields for school search
-      html += '<tr>';
+      html += `<tr data-clickable="true" data-school-id="${row.school_id}" onclick="viewItemDetails('schools', ${row.school_id})" style="cursor: pointer">`;
+
       const keys = Object.keys(data[0]);
+
       keys.forEach(k => {
         let value = row[k];
-        if (value === null || value === undefined || value === '' || 
-            String(value).toUpperCase() === 'NA' || 
-            String(value).toUpperCase() === 'N/A') {
+        if (value === null || value === undefined || value === '' ||
+          String(value).toUpperCase() === 'NA' ||
+          String(value).toUpperCase() === 'N/A') {
           value = '-';
         }
         html += `<td>${value}</td>`;
@@ -1147,13 +1149,13 @@ function renderTable(data, queryType) {
         html += `
           <td>
             <div class="action-buttons">
-              <button class="btn-edit" onclick='editSchool(${JSON.stringify(row).replace(/'/g, "&apos;")})'>
+              button class="btn-edit" onclick="event.stopPropagation(); editSchool(${JSON.stringify(row).replace(/"/g, '&quot;')})">
                 <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
                   <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
                 </svg>
                 Edit
               </button>
-              <button class="btn-danger" onclick='deleteSchool(${row.school_id}, "${row.school_name.replace(/'/g, "&apos;")}")'>
+              button class="btn-danger" onclick="event.stopPropagation(); deleteSchool(${row.schoolid}, '${row.schoolname.replace(/'/g, '\\')}')">
                 <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
                   <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
                 </svg>
@@ -1169,8 +1171,8 @@ function renderTable(data, queryType) {
       html += '</tr>';
     } else {
       // Make the row clickable for non-"all" searches
-      html += `<tr data-clickable="true" data-school-id="${row.school_id}" onclick='viewItemDetails("schools", "${row.school_id}")' style="cursor: pointer;">`;
-      
+      html += `<tr data-clickable="true" data-school-id="${row.school_id}" onclick="viewItemDetails('schools', ${row.school_id})" style="cursor: pointer">`;
+
       if (queryType === 'subjects') {
         html += `<td><strong>${row.school_name || '-'}</strong></td>`;
         html += `<td><span class="badge">${row.zone_code || '-'}</span></td>`;
@@ -1184,7 +1186,7 @@ function renderTable(data, queryType) {
           <strong>${row.cca_category || '-'}</strong>
           ${row.cca_name ? `<span style="color: var(--gray-500); font-size: 13px; margin-left: 8px;">(${row.cca_name})</span>` : ''}
         </td>`;
-      }else if (queryType === 'programmes') {
+      } else if (queryType === 'programmes') {
         html += `<td><strong>${row.school_name || '-'}</strong></td>`;
         html += `<td><span class="badge">${row.zone_code || '-'}</span></td>`;
         html += `<td>${row.mainlevel_code || '-'}</td>`;
@@ -1373,7 +1375,7 @@ function renderResultItem(type, item, query) {
     console.warn('No valid ID for item:', item);
     return '';
   }
-  
+
   let html = `<div class="result-item" data-school-id="${itemId}" onclick='viewItemDetails("schools", ${itemId})'>`;
   html += '<div class="result-item-header">';
 
@@ -1390,27 +1392,27 @@ function renderResultItem(type, item, query) {
     const highlightedName = highlightSearchTerm(name, query);
     html += `<div class="result-item-title">${highlightedName}</div>`;
   }
-    
+
   const highlightedName = highlightSearchTerm(name, query);
   html += `<div class="result-item-title">${highlightedName}</div>`;
 
   html += '</div>';
-  
-    // Description
-    if (item.description) {
-      let descText = item.description;
-      
-      // For CCAs, show both category and name
-      if (type === 'ccas' && item.cca_category) {
-        descText = `${item.cca_category} - ${item.description}`;
-      }
-      
-      const truncatedDesc = descText.length > 150 
-        ? descText.substring(0, 150) + '...'
-        : descText;
-      html += `<div class="result-item-description">${truncatedDesc}</div>`;
+
+  // Description
+  if (item.description) {
+    let descText = item.description;
+
+    // For CCAs, show both category and name
+    if (type === 'ccas' && item.cca_category) {
+      descText = `${item.cca_category} - ${item.description}`;
     }
-  
+
+    const truncatedDesc = descText.length > 150
+      ? descText.substring(0, 150) + '...'
+      : descText;
+    html += `<div class="result-item-description">${truncatedDesc}</div>`;
+  }
+
   // Meta tags
   html += '<div class="result-item-meta">';
 
@@ -1454,72 +1456,72 @@ function highlightSearchTerm(text, searchTerm) {
 }
 
 // ========== View Item Details ==========
-window.viewItemDetails = async function(type, id) {
-    console.log('Viewing details for:', type, id);
+window.viewItemDetails = async function (type, id) {
+  console.log('Viewing details for:', type, id);
 
-    if (!id) {
-        showToast('Invalid item ID', 'error');
-        return;
-    }
-    
-    // **CHECK FOR COMPARISON MODE FIRST**
-    if (comparisonMode.active && type === 'schools') {
-        // Try to get school name from multiple possible locations
-        let schoolName = 'Unknown School';
-        
-        // Try 1: Find by data-school-id attribute
-        let element = document.querySelector(`[data-school-id="${id}"]`);
-        
-        if (element) {
-            // Universal search result item
-            const titleElement = element.querySelector('.result-item-title');
-            if (titleElement) {
-                schoolName = titleElement.textContent.trim();
-            } 
-            // Table row
-            else {
-                const strongElement = element.querySelector('td strong');
-                if (strongElement) {
-                    schoolName = strongElement.textContent.trim();
-                } else {
-                    const firstCell = element.querySelector('td:first-child');
-                    if (firstCell) {
-                        schoolName = firstCell.textContent.trim();
-                    }
-                }
-            }
-        }
-        
-        console.log('Extracted school name:', schoolName, 'for ID:', id);
-        
-        const handled = window.handleComparisonClick(id, schoolName);
-        if (handled) return; // Stop here if comparison mode handled it
-    }
-    
-    // Normal detail view behavior
-    showToast('Loading details...', 'info');
+  if (!id) {
+    showToast('Invalid item ID', 'error');
+    return;
+  }
 
-    try {
-        if (type === 'schools') {
-            const fullData = await loadFullSchoolDetails(id);
-            if (fullData) {
-                displayEnhancedSchoolModal(fullData);
-            }
+  // **CHECK FOR COMPARISON MODE FIRST**
+  if (comparisonMode.active && type === 'schools') {
+    // Try to get school name from multiple possible locations
+    let schoolName = 'Unknown School';
+
+    // Try 1: Find by data-school-id attribute
+    let element = document.querySelector(`[data-school-id="${id}"]`);
+
+    if (element) {
+      // Universal search result item
+      const titleElement = element.querySelector('.result-item-title');
+      if (titleElement) {
+        schoolName = titleElement.textContent.trim();
+      }
+      // Table row
+      else {
+        const strongElement = element.querySelector('td strong');
+        if (strongElement) {
+          schoolName = strongElement.textContent.trim();
         } else {
-            let response = await fetch(`/api/search/details/${type}/${id}`);
-            const data = await response.json();
-
-            if (!data.success) {
-                showToast(data.error || 'Failed to load details', 'error');
-                return;
-            }
-
-            displayItemDetailsModal(type, data.data);
+          const firstCell = element.querySelector('td:first-child');
+          if (firstCell) {
+            schoolName = firstCell.textContent.trim();
+          }
         }
-    } catch (error) {
-        console.error('Error loading details:', error);
-        showToast(`Failed to load details: ${error.message}`, 'error');
+      }
     }
+
+    console.log('Extracted school name:', schoolName, 'for ID:', id);
+
+    const handled = window.handleComparisonClick(id, schoolName);
+    if (handled) return; // Stop here if comparison mode handled it
+  }
+
+  // Normal detail view behavior
+  showToast('Loading details...', 'info');
+
+  try {
+    if (type === 'schools') {
+      const fullData = await loadFullSchoolDetails(id);
+      if (fullData) {
+        displayEnhancedSchoolModal(fullData);
+      }
+    } else {
+      let response = await fetch(`/api/search/details/${type}/${id}`);
+      const data = await response.json();
+
+      if (!data.success) {
+        showToast(data.error || 'Failed to load details', 'error');
+        return;
+      }
+
+      displayItemDetailsModal(type, data.data);
+    }
+  } catch (error) {
+    console.error('Error loading details:', error);
+    showToast(`Failed to load details: ${error.message}`, 'error');
+  }
 }
 
 // ========== Display Item Details Modal ==========
@@ -1619,8 +1621,8 @@ function renderSchoolDetails(school) {
     html += `<div class="detail-row"><strong>MRT:</strong> <span>${school.mrt_desc}</span></div>`;
   }
   if (school.bus_desc) {
-    const busDesc = school.bus_desc.length > 100 
-      ? school.bus_desc.substring(0, 100) + '...' 
+    const busDesc = school.bus_desc.length > 100
+      ? school.bus_desc.substring(0, 100) + '...'
       : school.bus_desc;
     html += `<div class="detail-row"><strong>Bus Services:</strong> <span>${busDesc}</span></div>`;
   }
@@ -1688,7 +1690,7 @@ window.showAddModal = function () {
     showToast('Admin privileges required to add schools', 'error');
     return;
   }
-  
+
   console.log('Opening add modal');
   const modal = document.getElementById('addModal');
   if (modal) {
@@ -1716,7 +1718,7 @@ window.showEditModal = function (school) {
     showToast('Admin privileges required to edit schools', 'error');
     return;
   }
-  
+
   console.log('Opening edit modal for school:', school);
   const modal = document.getElementById('editModal');
   if (modal) {
@@ -1753,7 +1755,7 @@ window.showDeleteModal = function (schoolId, schoolName) {
     showToast('Admin privileges required to delete schools', 'error');
     return;
   }
-  
+
   console.log('Opening delete modal for:', schoolName);
   const modal = document.getElementById('deleteModal');
   if (modal) {
@@ -1780,13 +1782,13 @@ window.hideDeleteModal = function () {
 // Create Operation
 window.addSchool = async function (event) {
   event.preventDefault();
-  
+
   // Check if user is admin
   if (!isUserAdmin()) {
     showToast('Admin privileges required to add schools', 'error');
     return;
   }
-  
+
   console.log('Adding school...');
 
   const schoolData = {
@@ -1806,7 +1808,7 @@ window.addSchool = async function (event) {
       headers: getAuthHeaders(),
       body: JSON.stringify(schoolData)
     });
-    
+
     if (res.status === 401 || res.status === 403) {
       showToast('Admin privileges required to add schools', 'error');
       return;
@@ -1841,7 +1843,7 @@ window.editSchool = function (school) {
     showToast('Admin privileges required to edit schools', 'error');
     return;
   }
-  
+
   console.log('Edit school clicked:', school);
   showEditModal(school);
 };
@@ -1849,13 +1851,13 @@ window.editSchool = function (school) {
 // Update Operation (form submission)
 window.updateSchool = async function (event) {
   event.preventDefault();
-  
+
   // Check if user is admin
   if (!isUserAdmin()) {
     showToast('Admin privileges required to edit schools', 'error');
     return;
   }
-  
+
   console.log('Updating school...');
 
   const schoolId = document.getElementById('editSchoolId').value;
@@ -1876,7 +1878,7 @@ window.updateSchool = async function (event) {
       headers: getAuthHeaders(),
       body: JSON.stringify(updatedData)
     });
-    
+
     if (res.status === 401 || res.status === 403) {
       showToast('Admin privileges required to edit schools', 'error');
       return;
@@ -1904,7 +1906,7 @@ window.deleteSchool = function (schoolId, schoolName) {
     showToast('Admin privileges required to delete schools', 'error');
     return;
   }
-  
+
   console.log('Delete school clicked:', schoolId, schoolName);
   showDeleteModal(schoolId, schoolName);
 };
@@ -1916,7 +1918,7 @@ window.confirmDelete = async function () {
     showToast('Admin privileges required to delete schools', 'error');
     return;
   }
-  
+
   console.log('Confirming delete for:', pendingDeleteId, pendingDeleteName);
 
   if (!pendingDeleteId) return;
@@ -1926,7 +1928,7 @@ window.confirmDelete = async function () {
       method: 'DELETE',
       headers: getAuthHeaders()
     });
-    
+
     if (res.status === 401 || res.status === 403) {
       showToast('Admin privileges required to delete schools', 'error');
       return;
@@ -1976,46 +1978,46 @@ function loadSchoolStats() {
  * Load all school-related data from multiple endpoints
  */
 async function loadFullSchoolDetails(schoolId) {
-    try {
-        const [schoolResponse, subjectsResponse, ccasResponse, programmesResponse, distinctivesResponse] = await Promise.all([
-            fetch(`/api/schools/${schoolId}/details`),
-            fetch(`/api/schools/${schoolId}/subjects`),
-            fetch(`/api/schools/${schoolId}/ccas`),
-            fetch(`/api/schools/${schoolId}/programmes`),
-            fetch(`/api/schools/${schoolId}/distinctives`)
-        ]);
+  try {
+    const [schoolResponse, subjectsResponse, ccasResponse, programmesResponse, distinctivesResponse] = await Promise.all([
+      fetch(`/api/schools/${schoolId}/details`),
+      fetch(`/api/schools/${schoolId}/subjects`),
+      fetch(`/api/schools/${schoolId}/ccas`),
+      fetch(`/api/schools/${schoolId}/programmes`),
+      fetch(`/api/schools/${schoolId}/distinctives`)
+    ]);
 
-        if (!schoolResponse.ok) {
-            throw new Error('Failed to load school details');
-        }
-
-        const school = await schoolResponse.json();
-        const subjects = subjectsResponse.ok ? await subjectsResponse.json() : [];
-        const ccas = ccasResponse.ok ? await ccasResponse.json() : [];
-        const programmes = programmesResponse.ok ? await programmesResponse.json() : [];
-        const distinctives = distinctivesResponse.ok ? await distinctivesResponse.json() : [];
-
-        return {
-            school: school.school || school,
-            subjects: subjects || [],
-            ccas: ccas || [],
-            programmes: programmes || [],
-            distinctives: distinctives || []
-        };
-    } catch (error) {
-        console.error('Error loading full school details:', error);
-        showToast('Failed to load complete school details', 'error');
-        return null;
+    if (!schoolResponse.ok) {
+      throw new Error('Failed to load school details');
     }
+
+    const school = await schoolResponse.json();
+    const subjects = subjectsResponse.ok ? await subjectsResponse.json() : [];
+    const ccas = ccasResponse.ok ? await ccasResponse.json() : [];
+    const programmes = programmesResponse.ok ? await programmesResponse.json() : [];
+    const distinctives = distinctivesResponse.ok ? await distinctivesResponse.json() : [];
+
+    return {
+      school: school.school || school,
+      subjects: subjects || [],
+      ccas: ccas || [],
+      programmes: programmes || [],
+      distinctives: distinctives || []
+    };
+  } catch (error) {
+    console.error('Error loading full school details:', error);
+    showToast('Failed to load complete school details', 'error');
+    return null;
+  }
 }
 
 /**
  * Display enhanced school modal with comprehensive information
  */
 function displayEnhancedSchoolModal(data) {
-    const { school, subjects, ccas, programmes, distinctives } = data;
+  const { school, subjects, ccas, programmes, distinctives } = data;
 
-    let html = `
+  let html = `
         <div class="modal active" id="detailsModal">
             <div class="modal-overlay" onclick="closeDetailsModal()"></div>
             <div class="modal-content" style="max-width: 1000px; max-height: 90vh; overflow-y: auto;">
@@ -2044,8 +2046,8 @@ function displayEnhancedSchoolModal(data) {
         </div>
     `;
 
-    document.body.insertAdjacentHTML('beforeend', html);
-    document.body.style.overflow = 'hidden';
+  document.body.insertAdjacentHTML('beforeend', html);
+  document.body.style.overflow = 'hidden';
 }
 
 // ========== SCHOOL COMPARISON FUNCTIONS ==========
@@ -2056,11 +2058,11 @@ let comparisonMode = {
   school2: null
 };
 
-window.startComparisonMode = function() {
+window.startComparisonMode = function () {
   comparisonMode.active = true;
   comparisonMode.school1 = null;
   comparisonMode.school2 = null;
-  
+
   showComparisonNotification();
   // addComparisonClickListeners();
   showToast('Click on two schools to compare', 'info');
@@ -2070,7 +2072,7 @@ function showComparisonNotification() {
   // Remove existing notification if any
   const existing = document.getElementById('comparisonNotification');
   if (existing) existing.remove();
-  
+
   const html = `
     <div id="comparisonNotification" class="comparison-notification">
       <div class="comparison-notification-content">
@@ -2097,7 +2099,7 @@ function showComparisonNotification() {
       </div>
     </div>
   `;
-  
+
   document.body.insertAdjacentHTML('beforeend', html);
 }
 
@@ -2139,19 +2141,19 @@ function extractSchoolIdFromRow(row) {
   if (firstCell && !isNaN(firstCell.textContent.trim())) {
     return firstCell.textContent.trim();
   }
-  
+
   // Try from edit button
   const editBtn = row.querySelector('.btn-edit');
   if (editBtn) {
     const onclickAttr = editBtn.getAttribute('onclick');
     const match = onclickAttr?.match(/school_id['":]?\s*[:=]?\s*(\d+)/);
     if (match) return match[1];
-    
+
     // Try to extract from JSON in onclick
     const jsonMatch = onclickAttr?.match(/\{[^}]+school_id['":]?\s*:\s*(\d+)/);
     if (jsonMatch) return jsonMatch[1];
   }
-  
+
   // Try from delete button
   const deleteBtn = row.querySelector('.btn-danger');
   if (deleteBtn) {
@@ -2159,13 +2161,13 @@ function extractSchoolIdFromRow(row) {
     const match = onclickAttr?.match(/deleteSchool\((\d+)/);
     if (match) return match[1];
   }
-  
+
   return null;
 }
 
 function selectSchoolForComparison(element, schoolId) {
   if (!comparisonMode.active) return;
-  
+
   // If this school is already selected, deselect it
   if (comparisonMode.school1?.id === schoolId) {
     comparisonMode.school1 = null;
@@ -2179,9 +2181,9 @@ function selectSchoolForComparison(element, schoolId) {
     element.classList.remove('comparison-selected-2');
     return;
   }
-  
+
   const schoolName = extractSchoolName(element);
-  
+
   // Add to first empty slot
   if (!comparisonMode.school1) {
     comparisonMode.school1 = { id: schoolId, name: schoolName, element };
@@ -2193,7 +2195,7 @@ function selectSchoolForComparison(element, schoolId) {
     updateComparisonSlot(2, schoolName);
     element.classList.add('comparison-selected-2');
     showToast(`School 2 selected: ${schoolName}`, 'success');
-    
+
     // Both schools selected, execute comparison
     setTimeout(() => executeComparison(), 500);
   }
@@ -2203,20 +2205,20 @@ function extractSchoolName(element) {
   // Try different methods to extract school name
   const strong = element.querySelector('strong');
   if (strong) return strong.textContent.trim();
-  
+
   const titleDiv = element.querySelector('.result-item-title');
   if (titleDiv) return titleDiv.textContent.trim();
-  
+
   const firstCell = element.querySelector('td:first-child');
   if (firstCell) return firstCell.textContent.trim();
-  
+
   return 'Unknown School';
 }
 
 function updateComparisonSlot(slotNumber, schoolName) {
   const slot = document.getElementById(`comparisonSlot${slotNumber}`);
   if (!slot) return;
-  
+
   const slotText = slot.querySelector('.slot-text');
   if (schoolName) {
     slot.classList.add('filled');
@@ -2227,11 +2229,11 @@ function updateComparisonSlot(slotNumber, schoolName) {
   }
 }
 
-window.handleComparisonClick = function(schoolId, schoolName) {
+window.handleComparisonClick = function (schoolId, schoolName) {
   if (!comparisonMode.active) return false;
-  
+
   console.log('Comparison click:', schoolId, schoolName);
-  
+
   // If this school is already selected, deselect it
   if (comparisonMode.school1?.id === String(schoolId)) {
     comparisonMode.school1 = null;
@@ -2243,7 +2245,7 @@ window.handleComparisonClick = function(schoolId, schoolName) {
     updateComparisonSlot(2, null);
     return true;
   }
-  
+
   // Add to first empty slot
   if (!comparisonMode.school1) {
     comparisonMode.school1 = { id: String(schoolId), name: schoolName };
@@ -2254,25 +2256,25 @@ window.handleComparisonClick = function(schoolId, schoolName) {
     comparisonMode.school2 = { id: String(schoolId), name: schoolName };
     updateComparisonSlot(2, schoolName);
     showToast(`School 2: ${schoolName}`, 'success');
-    
+
     // Both schools selected, execute comparison
     setTimeout(() => executeComparison(), 500);
     return true;
   }
-  
+
   return true;
 };
 
-window.cancelComparison = function() {
+window.cancelComparison = function () {
   comparisonMode.active = false;
-  
+
   // Remove notification
   const notification = document.getElementById('comparisonNotification');
   if (notification) notification.remove();
-  
+
   comparisonMode.school1 = null;
   comparisonMode.school2 = null;
-  
+
   showToast('Comparison cancelled', 'info');
 };
 
@@ -2281,46 +2283,46 @@ async function executeComparison() {
     showToast('Please select two schools', 'error');
     return;
   }
-  
+
   console.log('Executing comparison:', comparisonMode.school1, comparisonMode.school2);
   showToast('Loading comparison...', 'info');
-  
+
   try {
     const response = await fetch('/api/schools/compare', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        school1_id: comparisonMode.school1.id, 
-        school2_id: comparisonMode.school2.id 
+      body: JSON.stringify({
+        school1_id: comparisonMode.school1.id,
+        school2_id: comparisonMode.school2.id
       })
     });
-    
+
     if (!response.ok) {
       throw new Error(`Server responded with status ${response.status}`);
     }
-    
+
     const data = await response.json();
     console.log('Comparison data received:', data);
-    
+
     if (!data.success) {
       showToast(data.message || 'Comparison failed', 'error');
       return;
     }
-    
+
     displaySideBySideComparison(data.school1, data.school2);
     showToast('Comparison loaded successfully', 'success');
-    
+
     // Don't cancel comparison mode - let user compare more schools
     // Clear selections for next comparison
     comparisonMode.school1 = null;
     comparisonMode.school2 = null;
     updateComparisonSlot(1, null);
     updateComparisonSlot(2, null);
-    
+
   } catch (error) {
     console.error('Comparison error:', error);
     showToast('Failed to compare schools: ' + error.message, 'error');
-    
+
     // Check if it's a network error
     if (error.message.includes('Failed to fetch') || error.message.includes('ERR_CONNECTION_REFUSED')) {
       showToast('Server connection failed. Please check if the server is running.', 'error');
@@ -2343,7 +2345,7 @@ function displaySideBySideComparison(school1, school2) {
       </button>
     </div>
   `;
-  
+
   document.body.insertAdjacentHTML('beforeend', html);
   document.body.style.overflow = 'hidden';
 }
@@ -2353,7 +2355,7 @@ function renderSchoolComparisonPanel(school, otherSchool, panelNum) {
   const uniqueSubjects = school.subjects.filter(s => !otherSchool.subjects.includes(s));
   const uniqueCCAs = school.ccas.filter(c => !otherSchool.ccas.some(oc => oc.cca_grouping_desc === c.cca_grouping_desc));
   const uniqueProgs = school.programmes.filter(p => !otherSchool.programmes.includes(p));
-  
+
   return `
     <div class="comparison-panel panel-${panelNum}">
       <div class="comparison-panel-header">
@@ -2410,9 +2412,9 @@ function renderSpecialProgrammesSection(s) {
   if (s.gifted_ind === 'Yes') programmes.push('Gifted');
   if (s.ip_ind === 'Yes') programmes.push('IP');
   if (s.sap_ind === 'Yes') programmes.push('SAP');
-  
+
   if (programmes.length === 0) return '';
-  
+
   return `
     <div class="info-section">
       <h4>Special Programmes</h4>
@@ -2425,15 +2427,15 @@ function renderSpecialProgrammesSection(s) {
 
 function renderSubjectsSection(subjects, uniqueSubjects) {
   if (!subjects || subjects.length === 0) return '';
-  
+
   return `
     <div class="info-section">
       <h4>Subjects (${subjects.length})</h4>
       <div class="badge-list">
         ${subjects.map(s => {
-          const isUnique = uniqueSubjects.includes(s);
-          return `<span class="badge ${isUnique ? 'badge-unique' : ''}">${s}</span>`;
-        }).join('')}
+    const isUnique = uniqueSubjects.includes(s);
+    return `<span class="badge ${isUnique ? 'badge-unique' : ''}">${s}</span>`;
+  }).join('')}
       </div>
     </div>
   `;
@@ -2441,15 +2443,15 @@ function renderSubjectsSection(subjects, uniqueSubjects) {
 
 function renderCCAsSection(ccas, uniqueCCAs) {
   if (!ccas || ccas.length === 0) return '';
-  
+
   return `
     <div class="info-section">
       <h4>CCAs (${ccas.length})</h4>
       <div class="badge-list">
         ${ccas.map(c => {
-          const isUnique = uniqueCCAs.some(uc => uc.cca_grouping_desc === c.cca_grouping_desc);
-          return `<span class="badge ${isUnique ? 'badge-unique' : ''}">${c.cca_grouping_desc}</span>`;
-        }).join('')}
+    const isUnique = uniqueCCAs.some(uc => uc.cca_grouping_desc === c.cca_grouping_desc);
+    return `<span class="badge ${isUnique ? 'badge-unique' : ''}">${c.cca_grouping_desc}</span>`;
+  }).join('')}
       </div>
     </div>
   `;
@@ -2457,15 +2459,15 @@ function renderCCAsSection(ccas, uniqueCCAs) {
 
 function renderProgrammesSection(programmes, uniqueProgs) {
   if (!programmes || programmes.length === 0) return '';
-  
+
   return `
     <div class="info-section">
       <h4>MOE Programmes (${programmes.length})</h4>
       <div class="badge-list">
         ${programmes.map(p => {
-          const isUnique = uniqueProgs.includes(p);
-          return `<span class="badge ${isUnique ? 'badge-unique' : ''}">${p}</span>`;
-        }).join('')}
+    const isUnique = uniqueProgs.includes(p);
+    return `<span class="badge ${isUnique ? 'badge-unique' : ''}">${p}</span>`;
+  }).join('')}
       </div>
     </div>
   `;
@@ -2473,7 +2475,7 @@ function renderProgrammesSection(programmes, uniqueProgs) {
 
 function renderDistinctivesSection(distinctives) {
   if (!distinctives || distinctives.length === 0) return '';
-  
+
   return `
     <div class="info-section">
       <h4>Distinctive Programmes</h4>
@@ -2489,7 +2491,7 @@ function renderDistinctivesSection(distinctives) {
 
 function renderTransportSection(s) {
   if (!s.mrt_desc && !s.bus_desc) return '';
-  
+
   return `
     <div class="info-section">
       <h4>Transportation</h4>
@@ -2501,7 +2503,7 @@ function renderTransportSection(s) {
   `;
 }
 
-window.closeComparisonModal = function() {
+window.closeComparisonModal = function () {
   const modal = document.getElementById('comparisonModal');
   if (modal) {
     modal.remove();
@@ -2510,7 +2512,7 @@ window.closeComparisonModal = function() {
 };
 
 // ========== DISTANCE SEARCH BY POSTAL CODE ==========
-window.showDistanceSearch = function() {
+window.showDistanceSearch = function () {
   const html = `
     <div class="modal active" id="distanceSearchModal">
       <div class="modal-overlay" onclick="closeDistanceSearch()"></div>
@@ -2553,50 +2555,50 @@ window.showDistanceSearch = function() {
       </div>
     </div>
   `;
-  
+
   document.body.insertAdjacentHTML('beforeend', html);
   document.body.style.overflow = 'hidden';
 };
 
-window.executeDistanceSearch = async function() {
+window.executeDistanceSearch = async function () {
   const postal_code = document.getElementById('distancePostalCode').value.trim();
   const radius_km = parseFloat(document.getElementById('distanceRadius').value);
-  
+
   if (!postal_code || postal_code.length !== 6) {
     showToast('Please enter a valid 6-digit postal code', 'error');
     return;
   }
-  
+
   if (!radius_km || radius_km <= 0) {
     showToast('Please enter a valid radius', 'error');
     return;
   }
-  
+
   closeDistanceSearch();
   showToast('Searching nearby schools...', 'info');
-  
+
   try {
     const response = await fetch('/api/schools/search-by-postal-code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ postal_code, radius_km })
     });
-    
+
     const data = await response.json();
-    
+
     if (!data.success) {
       showToast(data.message || 'Search failed', 'error');
       return;
     }
-    
+
     displayDistanceResults(data.results, data.search_params);
-    
+
     if (data.results.length === 0) {
       showToast('No schools found within the specified radius', 'info');
     } else {
       showToast(`Found ${data.results.length} school(s) nearby`, 'success');
     }
-    
+
   } catch (error) {
     console.error('Distance search error:', error);
     showToast('Failed to search schools: ' + error.message, 'error');
@@ -2606,12 +2608,12 @@ window.executeDistanceSearch = async function() {
 function displayDistanceResults(results, params) {
   const resultsTable = document.getElementById('resultsTable');
   const resultsMeta = document.getElementById('resultsMeta');
-  
+
   // Switch to search view if not already there
   switchView('search');
-  
+
   resultsMeta.textContent = `Found ${results.length} school(s) within ${params.radius_km}km of postal code ${params.postal_code}`;
-  
+
   if (results.length === 0) {
     resultsTable.innerHTML = `
       <div class="empty-state">
@@ -2625,7 +2627,7 @@ function displayDistanceResults(results, params) {
     `;
     return;
   }
-  
+
   let html = '<div style="overflow-x: auto;"><table class="data-table"><thead><tr>';
   html += '<th>Distance (km)</th>';
   html += '<th>School Name</th>';
@@ -2634,7 +2636,7 @@ function displayDistanceResults(results, params) {
   html += '<th>Address</th>';
   html += '<th>Postal Code</th>';
   html += '</tr></thead><tbody>';
-  
+
   results.forEach(school => {
     html += `<tr data-clickable="true" onclick='viewItemDetails("schools", ${school.school_id})' style="cursor: pointer;">`;
     html += `<td><span class="badge" style="background: #DBEAFE; color: #1E40AF; font-weight: 700;">${school.distance_km} km</span></td>`;
@@ -2645,12 +2647,12 @@ function displayDistanceResults(results, params) {
     html += `<td>${school.postal_code}</td>`;
     html += `</tr>`;
   });
-  
+
   html += '</tbody></table></div>';
   resultsTable.innerHTML = html;
 }
 
-window.closeDistanceSearch = function() {
+window.closeDistanceSearch = function () {
   const modal = document.getElementById('distanceSearchModal');
   if (modal) {
     modal.remove();
@@ -2662,7 +2664,7 @@ window.closeDistanceSearch = function() {
  * Render basic information section
  */
 function renderBasicInfo(school) {
-    return `
+  return `
         <div class="info-section">
             <h4 style="margin-bottom: 1rem; color: #1F2937; border-bottom: 2px solid #3B82F6; padding-bottom: 0.5rem;">
                 Basic Information
@@ -2686,11 +2688,11 @@ function renderBasicInfo(school) {
  * Render contact information section
  */
 function renderContactInfo(school) {
-    if (!school.email_address && !school.telephone_no && !school.telephone_no_2 && !school.fax_no && !school.url_address) {
-        return '';
-    }
+  if (!school.email_address && !school.telephone_no && !school.telephone_no_2 && !school.fax_no && !school.url_address) {
+    return '';
+  }
 
-    return `
+  return `
         <div class="info-section" style="margin-top: 1.5rem;">
             <h4 style="margin-bottom: 1rem; color: #1F2937; border-bottom: 2px solid #F59E0B; padding-bottom: 0.5rem;">
                 Contact Information
@@ -2710,12 +2712,12 @@ function renderContactInfo(school) {
  * Render personnel section
  */
 function renderPersonnel(school) {
-    const hasPersonnel = school.principal_name || school.first_vp_name || school.second_vp_name || 
-                         school.third_vp_name || school.fourth_vp_name || school.fifth_vp_name;
+  const hasPersonnel = school.principal_name || school.first_vp_name || school.second_vp_name ||
+    school.third_vp_name || school.fourth_vp_name || school.fifth_vp_name;
 
-    if (!hasPersonnel) return '';
+  if (!hasPersonnel) return '';
 
-    return `
+  return `
         <div class="info-section" style="margin-top: 1.5rem;">
             <h4 style="margin-bottom: 1rem; color: #1F2937; border-bottom: 2px solid #10B981; padding-bottom: 0.5rem;">
                 School Leadership
@@ -2736,15 +2738,15 @@ function renderPersonnel(school) {
  * Render special programmes section
  */
 function renderSpecialProgrammes(school) {
-    const indicators = [];
-    if (school.autonomous_ind === 'Yes') indicators.push('Autonomous');
-    if (school.gifted_ind === 'Yes') indicators.push('Gifted');
-    if (school.ip_ind === 'Yes') indicators.push('IP');
-    if (school.sap_ind === 'Yes') indicators.push('SAP');
+  const indicators = [];
+  if (school.autonomous_ind === 'Yes') indicators.push('Autonomous');
+  if (school.gifted_ind === 'Yes') indicators.push('Gifted');
+  if (school.ip_ind === 'Yes') indicators.push('IP');
+  if (school.sap_ind === 'Yes') indicators.push('SAP');
 
-    if (indicators.length === 0) return '';
+  if (indicators.length === 0) return '';
 
-    return `
+  return `
         <div class="info-section" style="margin-top: 1.5rem;">
             <h4 style="margin-bottom: 1rem; color: #1F2937; border-bottom: 2px solid #8B5CF6; padding-bottom: 0.5rem;">
                 Special Programmes
@@ -2760,14 +2762,14 @@ function renderSpecialProgrammes(school) {
  * Render mother tongue languages section
  */
 function renderMotherTongue(school) {
-    const languages = [];
-    if (school.mothertongue1_code && school.mothertongue1_code !== 'NA') languages.push(school.mothertongue1_code);
-    if (school.mothertongue2_code && school.mothertongue2_code !== 'NA') languages.push(school.mothertongue2_code);
-    if (school.mothertongue3_code && school.mothertongue3_code !== 'NA') languages.push(school.mothertongue3_code);
+  const languages = [];
+  if (school.mothertongue1_code && school.mothertongue1_code !== 'NA') languages.push(school.mothertongue1_code);
+  if (school.mothertongue2_code && school.mothertongue2_code !== 'NA') languages.push(school.mothertongue2_code);
+  if (school.mothertongue3_code && school.mothertongue3_code !== 'NA') languages.push(school.mothertongue3_code);
 
-    if (languages.length === 0) return '';
+  if (languages.length === 0) return '';
 
-    return `
+  return `
         <div class="info-section" style="margin-top: 1.5rem;">
             <h4 style="margin-bottom: 1rem; color: #1F2937; border-bottom: 2px solid #EC4899; padding-bottom: 0.5rem;">
                 Mother Tongue Languages Offered
@@ -2783,9 +2785,9 @@ function renderMotherTongue(school) {
  * Render transportation section
  */
 function renderTransport(school) {
-    if (!school.mrt_desc && !school.bus_desc) return '';
+  if (!school.mrt_desc && !school.bus_desc) return '';
 
-    return `
+  return `
         <div class="info-section" style="margin-top: 1.5rem;">
             <h4 style="margin-bottom: 1rem; color: #1F2937; border-bottom: 2px solid #EF4444; padding-bottom: 0.5rem;">
                 Transportation
@@ -2802,9 +2804,9 @@ function renderTransport(school) {
  * Render subjects list
  */
 function renderSubjectsList(subjects) {
-    if (!subjects || subjects.length === 0) return '';
+  if (!subjects || subjects.length === 0) return '';
 
-    return `
+  return `
         <div class="info-section" style="margin-top: 1.5rem;">
             <h4 style="margin-bottom: 1rem; color: #1F2937; border-bottom: 2px solid #3B82F6; padding-bottom: 0.5rem;">
                 Subjects Offered (${subjects.length})
@@ -2820,19 +2822,19 @@ function renderSubjectsList(subjects) {
  * Render CCAs grouped by type (e.g., Visual Arts, Sports & Games)
  */
 function renderCCAsList(ccas) {
-    if (!ccas || ccas.length === 0) return '';
-    
-    // Group CCAs by cca_generic_name (the category)
-    const groupedCCAs = {};
-    ccas.forEach(cca => {
-        const group = cca.cca_generic_name || 'Other';
-        if (!groupedCCAs[group]) groupedCCAs[group] = [];
-        groupedCCAs[group].push(cca);
-    });
+  if (!ccas || ccas.length === 0) return '';
 
-    let ccaHTML = '';
-    Object.keys(groupedCCAs).sort().forEach(group => {
-        ccaHTML += `
+  // Group CCAs by cca_generic_name (the category)
+  const groupedCCAs = {};
+  ccas.forEach(cca => {
+    const group = cca.cca_generic_name || 'Other';
+    if (!groupedCCAs[group]) groupedCCAs[group] = [];
+    groupedCCAs[group].push(cca);
+  });
+
+  let ccaHTML = '';
+  Object.keys(groupedCCAs).sort().forEach(group => {
+    ccaHTML += `
             <div style="margin-bottom: 1.5rem;">
                 <h5 style="color: #059669; margin-bottom: 0.75rem; font-size: 1rem; font-weight: 600;">
                     ${group} (${groupedCCAs[group].length})
@@ -2841,18 +2843,18 @@ function renderCCAsList(ccas) {
                     ${groupedCCAs[group].map(cca => `
                         <div style="padding: 0.875rem; background: #F0FDF4; border-left: 3px solid #10B981; border-radius: 0.375rem;">
                             <strong style="color: #065F46; font-size: 0.9rem;">${cca.cca_grouping_desc}</strong>
-                            ${cca.cca_customized_name && cca.cca_customized_name !== cca.cca_grouping_desc ? 
-                                `<div style="color: #6B7280; font-size: 0.8rem; margin-top: 0.25rem;">${cca.cca_customized_name}</div>` : ''}
-                            ${cca.school_section ? 
-                                `<span class="badge" style="font-size: 0.7rem; margin-top: 0.5rem; background: #D1FAE5; color: #065F46; padding: 0.125rem 0.5rem;">${cca.school_section}</span>` : ''}
+                            ${cca.cca_customized_name && cca.cca_customized_name !== cca.cca_grouping_desc ?
+        `<div style="color: #6B7280; font-size: 0.8rem; margin-top: 0.25rem;">${cca.cca_customized_name}</div>` : ''}
+                            ${cca.school_section ?
+        `<span class="badge" style="font-size: 0.7rem; margin-top: 0.5rem; background: #D1FAE5; color: #065F46; padding: 0.125rem 0.5rem;">${cca.school_section}</span>` : ''}
                         </div>
                     `).join('')}
                 </div>
             </div>
         `;
-    });
+  });
 
-    return `
+  return `
         <div class="info-section" style="margin-top: 1.5rem;">
             <h4 style="margin-bottom: 1rem; color: #1F2937; border-bottom: 2px solid #10B981; padding-bottom: 0.5rem;">
                 Co-Curricular Activities (${ccas.length})
@@ -2866,9 +2868,9 @@ function renderCCAsList(ccas) {
  * Render MOE programmes list
  */
 function renderProgrammesList(programmes) {
-    if (!programmes || programmes.length === 0) return '';
+  if (!programmes || programmes.length === 0) return '';
 
-    return `
+  return `
         <div class="info-section" style="margin-top: 1.5rem;">
             <h4 style="margin-bottom: 1rem; color: #1F2937; border-bottom: 2px solid #F59E0B; padding-bottom: 0.5rem;">
                 MOE Programmes (${programmes.length})
@@ -2888,9 +2890,9 @@ function renderProgrammesList(programmes) {
  * Render distinctive programmes (ALP and LLP with domains and titles)
  */
 function renderDistinctivesList(distinctives) {
-    if (!distinctives || distinctives.length === 0) return '';
+  if (!distinctives || distinctives.length === 0) return '';
 
-    return `
+  return `
         <div class="info-section" style="margin-top: 1.5rem;">
             <h4 style="margin-bottom: 1rem; color: #1F2937; border-bottom: 2px solid #8B5CF6; padding-bottom: 0.5rem;">
                 Distinctive Programmes (${distinctives.length})
