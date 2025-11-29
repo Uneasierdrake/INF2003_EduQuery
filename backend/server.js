@@ -8,6 +8,88 @@ require('dotenv').config();
 const app = express();
 const path = require('path');
 
+// OneMap API credentials from environment variables
+const ONEMAP_EMAIL = process.env.ONEMAP_EMAIL;
+const ONEMAP_PASSWORD = process.env.ONEMAP_PASSWORD;
+
+// Token cache
+let onemapToken = null;
+let onemapTokenExpiry = null;
+
+// Get or refresh OneMap authentication token
+async function getOneMapToken() {
+  // Return cached token if still valid (with 1 hour buffer)
+  if (onemapToken && onemapTokenExpiry && Date.now() < onemapTokenExpiry - 3600000) {
+    return onemapToken;
+  }
+  
+  if (!ONEMAP_EMAIL || !ONEMAP_PASSWORD) {
+    console.error('❌ OneMap credentials not configured');
+    console.error('   Please set ONEMAP_EMAIL and ONEMAP_PASSWORD in your .env file');
+    return null;
+  }
+  
+  console.log('🔄 Fetching new OneMap token...');
+  console.log('   Email:', ONEMAP_EMAIL.substring(0, 3) + '***');
+  
+  try {
+    const response = await fetch('https://www.onemap.gov.sg/api/auth/post/getToken', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email: ONEMAP_EMAIL,
+        password: ONEMAP_PASSWORD
+      })
+    });
+    
+    // Get response body for debugging
+    const responseText = await response.text();
+    
+    if (!response.ok) {
+      console.error('❌ OneMap API Response:');
+      console.error('   Status:', response.status, response.statusText);
+      console.error('   Body:', responseText);
+      throw new Error(`OneMap auth failed: ${response.status}`);
+    }
+    
+    const data = JSON.parse(responseText);
+    
+    if (!data.access_token) {
+      console.error('OneMap auth response:', data);
+      throw new Error('No access token in response');
+    }
+    
+    // Store token (expires in 3 days)
+    onemapToken = data.access_token;
+    onemapTokenExpiry = Date.now() + 259200000;
+    
+    console.log('✓ OneMap token obtained successfully');
+    console.log(`  Expires: ${new Date(onemapTokenExpiry).toLocaleString()}`);
+    
+    return onemapToken;
+    
+  } catch (error) {
+    console.error('❌ OneMap authentication error:', error.message);
+    return null;
+  }
+}
+
+// Test authentication on startup
+(async function testOneMapAuth() {
+  console.log('\n🔐 Testing OneMap API authentication...');
+  const token = await getOneMapToken();
+  if (token) {
+    console.log('✓ OneMap API ready for location services\n');
+  } else {
+    console.error('⚠️  OneMap authentication failed');
+    console.error('   "Use My Location" feature will not work');
+    console.error('   Register at: https://www.onemap.gov.sg/apidocs/register\n');
+  }
+})();
+
+
 // Middleware
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend')));
@@ -35,6 +117,39 @@ const passwordUtils = {
     return await bcrypt.compare(password, hash);
   }
 };
+
+// HELPER FUNCTION: Convert Singapore Postal Code to Coordinates (with auth)
+async function getCoordinatesFromPostalCode(postalCode) {
+  try {
+    // Get authentication token
+    const token = await getOneMapToken();
+    
+    const apiUrl = `https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${postalCode}&returnGeom=Y&getAddrDetails=Y&pageNum=1`;
+    
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = token;
+    }
+    
+    const response = await fetch(apiUrl, { headers });
+    const data = await response.json();
+    
+    if (data.found === 0 || !data.results || data.results.length === 0) {
+      return null;
+    }
+    
+    const result = data.results[0];
+    
+    return {
+      latitude: parseFloat(result.LATITUDE),
+      longitude: parseFloat(result.LONGITUDE),
+      address: result.ADDRESS
+    };
+  } catch (error) {
+    console.error('OneMap API error:', error);
+    return null;
+  }
+}
 
 // JWT secret (use environment variable in production)
 const JWT_SECRET = process.env.JWT_SECRET || 'eduquery-secret-key';
@@ -407,31 +522,125 @@ app.get('/api/schools/:id/details', async (req, res) => {
   }
 });
 
-// ========== HELPER FUNCTION: Convert Singapore Postal Code to Coordinates ==========
-async function getCoordinatesFromPostalCode(postalCode) {
+// REVERSE GEOCODING: Convert coordinates to postal code (with authentication)
+async function getPostalCodeFromCoordinates(latitude, longitude) {
   try {
-    // Use Singapore's OneMap API (free, no auth required)
-    const response = await fetch(
-      `https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${postalCode}&returnGeom=Y&getAddrDetails=Y&pageNum=1`
-    );
+    const token = await getOneMapToken();
     
-    const data = await response.json();
-    
-    if (data.found === 0 || !data.results || data.results.length === 0) {
+    if (!token) {
+      console.error('Cannot perform reverse geocode: No OneMap token');
       return null;
     }
     
-    const result = data.results[0];
-    return {
-      latitude: parseFloat(result.LATITUDE),
-      longitude: parseFloat(result.LONGITUDE),
-      address: result.ADDRESS
+    console.log(`🔍 Reverse geocoding: ${latitude}, ${longitude}`);
+    
+    // Use OneMap's reverse geocode API (better for coordinates)
+    const apiUrl = `https://www.onemap.gov.sg/api/public/revgeocode?location=${latitude},${longitude}&buffer=100&addressType=all`;
+    
+    const response = await fetch(apiUrl, {
+      headers: { 'Authorization': token }
+    });
+    
+    if (!response.ok) {
+      console.error(`OneMap API error: ${response.status}`);
+      return null;
+    }
+    
+    const data = await response.json();
+    console.log('   OneMap response:', data);
+    
+    // Check if we have geocode info
+    if (!data.GeocodeInfo || data.GeocodeInfo.length === 0) {
+      console.warn('   No geocode info returned');
+      return null;
+    }
+    
+    // Get the first result
+    const geocode = data.GeocodeInfo[0];
+    
+    // Validate postal code
+    if (!geocode.POSTALCODE || geocode.POSTALCODE.length !== 6) {
+      console.warn('   No valid postal code in result');
+      return null;
+    }
+    
+    const result = {
+      postalCode: geocode.POSTALCODE,
+      address: geocode.BUILDING || geocode.ROAD || geocode.BLOCK || 'Singapore',
+      buildingName: geocode.BUILDING || null
     };
+    
+    console.log(`✓ Found: ${result.postalCode} - ${result.address}`);
+    
+    return result;
+    
   } catch (error) {
-    console.error('OneMap API error:', error);
+    console.error('Reverse geocode error:', error);
     return null;
   }
 }
+
+// API ENDPOINT: Reverse geocoding (coordinates → postal code)
+app.get('/api/reverse-geocode', async (req, res) => {
+  try {
+    const { lat, lng } = req.query;
+    
+    if (!lat || !lng) {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude and longitude required'
+      });
+    }
+    
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lng);
+    
+    if (isNaN(latitude) || isNaN(longitude)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid coordinates'
+      });
+    }
+    
+    // Validate Singapore bounds
+    if (latitude < 1.1 || latitude > 1.5 || longitude < 103.6 || longitude > 104.1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Coordinates outside Singapore'
+      });
+    }
+    
+    const result = await getPostalCodeFromCoordinates(latitude, longitude);
+    
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: 'No postal code found for coordinates'
+      });
+    }
+    
+    // Log activity
+    if (typeof logActivity === 'function') {
+      logActivity('reverse-geocode', { 
+        latitude, 
+        longitude, 
+        postalCode: result.postalCode 
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: result
+    });
+    
+  } catch (error) {
+    console.error('Reverse geocode API error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Geocoding service failed'
+    });
+  }
+});
 
 // ========== SEARCH BY POSTAL CODE DISTANCE (Using OneMap API) ==========
 app.post('/api/schools/search-by-postal-code', async (req, res) => {
@@ -458,14 +667,14 @@ app.post('/api/schools/search-by-postal-code', async (req, res) => {
     // Get coordinates for the search postal code using OneMap API
     console.log('Fetching coordinates from OneMap API...');
     const searchLocation = await getCoordinatesFromPostalCode(postal_code);
-    
+
     if (!searchLocation) {
       return res.status(404).json({
         success: false,
         message: `Postal code ${postal_code} not found. Please verify the postal code is correct.`
       });
     }
-    
+
     const { latitude: searchLat, longitude: searchLon } = searchLocation;
     console.log('Search center coordinates:', { searchLat, searchLon });
 
@@ -498,42 +707,42 @@ app.post('/api/schools/search-by-postal-code', async (req, res) => {
     const schoolsWithDistance = [];
     let coordinateFetchCount = 0;
     const maxConcurrentRequests = 5; // Limit concurrent API calls
-    
+
     // Process schools in batches to avoid rate limiting
     for (let i = 0; i < schoolsResult.rows.length; i += maxConcurrentRequests) {
       const batch = schoolsResult.rows.slice(i, i + maxConcurrentRequests);
-      
+
       const batchResults = await Promise.all(
         batch.map(async (school) => {
           try {
             const schoolCoords = await getCoordinatesFromPostalCode(school.postal_code);
-            
+
             if (!schoolCoords) {
               return null;
             }
-            
+
             coordinateFetchCount++;
-            
+
             // Calculate distance using Haversine formula
             const R = 6371; // Earth's radius in km
             const dLat = (schoolCoords.latitude - searchLat) * Math.PI / 180;
             const dLon = (schoolCoords.longitude - searchLon) * Math.PI / 180;
-            
-            const a = 
+
+            const a =
               Math.sin(dLat / 2) * Math.sin(dLat / 2) +
               Math.cos(searchLat * Math.PI / 180) * Math.cos(schoolCoords.latitude * Math.PI / 180) *
               Math.sin(dLon / 2) * Math.sin(dLon / 2);
-            
+
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
             const distance = R * c;
-            
+
             if (distance <= radius_km) {
               return {
                 ...school,
                 distance_km: Math.round(distance * 100) / 100
               };
             }
-            
+
             return null;
           } catch (error) {
             console.error(`Error processing school ${school.school_name}:`, error);
@@ -541,10 +750,10 @@ app.post('/api/schools/search-by-postal-code', async (req, res) => {
           }
         })
       );
-      
+
       // Add non-null results to the array
       schoolsWithDistance.push(...batchResults.filter(r => r !== null));
-      
+
       // Add a small delay between batches to be nice to the API
       if (i + maxConcurrentRequests < schoolsResult.rows.length) {
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -596,25 +805,25 @@ app.post('/api/schools/search-by-postal-code', async (req, res) => {
 app.get('/api/postal-code/:postalCode', async (req, res) => {
   try {
     const { postalCode } = req.params;
-    
+
     console.log('Looking up postal code:', postalCode);
-    
+
     if (!/^\d{6}$/.test(postalCode)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid postal code format. Singapore postal codes must be 6 digits.'
       });
     }
-    
+
     const coordinates = await getCoordinatesFromPostalCode(postalCode);
-    
+
     if (!coordinates) {
       return res.status(404).json({
         success: false,
         message: 'Postal code not found or coordinates not available'
       });
     }
-    
+
     res.json({
       success: true,
       postal_code: postalCode,
@@ -622,7 +831,7 @@ app.get('/api/postal-code/:postalCode', async (req, res) => {
       longitude: coordinates.longitude,
       address: coordinates.address
     });
-    
+
   } catch (err) {
     console.error('Postal code lookup error:', err);
     res.status(500).json({

@@ -1146,18 +1146,25 @@ function renderTable(data, queryType) {
 
       // Add action buttons for schools (admin only)
       if (row.school_id && isUserAdmin()) {
+        const safeSchoolJson = JSON.stringify(row).replace(/"/g, '&quot;');
+        const safeSchoolName = String(row.school_name || '').replace(/'/g, "\\'");
+
         html += `
           <td>
             <div class="action-buttons">
-              button class="btn-edit" onclick="event.stopPropagation(); editSchool(${JSON.stringify(row).replace(/"/g, '&quot;')})">
+              <button class="btn-edit"
+                      onclick="event.stopPropagation(); editSchool(${safeSchoolJson})">
                 <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
                   <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
                 </svg>
                 Edit
               </button>
-              button class="btn-danger" onclick="event.stopPropagation(); deleteSchool(${row.schoolid}, '${row.schoolname.replace(/'/g, '\\')}')">
+              <button class="btn-danger"
+                      onclick="event.stopPropagation(); deleteSchool(${row.school_id}, '${safeSchoolName}')">
                 <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
-                  <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                  <path fill-rule="evenodd"
+                        d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+                        clip-rule="evenodd"/>
                 </svg>
                 Delete
               </button>
@@ -2511,109 +2518,267 @@ window.closeComparisonModal = function () {
   }
 };
 
-// ========== DISTANCE SEARCH BY POSTAL CODE ==========
+// ========== CORRECTED DISTANCE SEARCH BY POSTAL CODE ==========
 window.showDistanceSearch = function () {
-  const html = `
-    <div class="modal active" id="distanceSearchModal">
-      <div class="modal-overlay" onclick="closeDistanceSearch()"></div>
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>Search Schools by Distance</h3>
-          <button class="modal-close" onclick="closeDistanceSearch()">×</button>
-        </div>
-        <div style="padding: 24px;">
-          <div class="form-grid">
-            <div class="form-group full-width">
-              <label>Postal Code</label>
-              <input type="text" id="distancePostalCode" placeholder="e.g., 569842" pattern="[0-9]{6}" maxlength="6" required>
-              <span class="form-hint">Enter a 6-digit Singapore postal code</span>
-            </div>
-            <div class="form-group full-width">
-              <label>Radius (km)</label>
-              <input type="number" id="distanceRadius" step="0.5" min="0.5" max="20" value="3" required>
-              <span class="form-hint">Search within this distance (max 20km)</span>
-            </div>
-          </div>
-          
-          <div class="tip-item" style="margin-top: 16px;">
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"/>
-            </svg>
-            <span>Enter any Singapore postal code to find nearby schools</span>
-          </div>
-          
-          <div class="modal-footer">
-            <button class="btn-secondary" onclick="closeDistanceSearch()">Cancel</button>
-            <button class="btn-primary" onclick="executeDistanceSearch()">
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M9 2a7 7 0 015.618 11.176l4.1 4.1a1 1 0 01-1.414 1.414l-4.1-4.1A7 7 0 119 2zm0 2a5 5 0 100 10 5 5 0 000-10z"/>
-              </svg>
-              Search
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
+  console.log('Opening distance search modal');
 
-  document.body.insertAdjacentHTML('beforeend', html);
+  // Find the modal element in the DOM
+  const modal = document.getElementById('distanceSearchModal');
+
+  // Check if modal exists
+  if (!modal) {
+    console.error('Distance search modal not found in DOM');
+    showToast('Error: Modal not found', 'error');
+    return;
+  }
+
+  // Show the modal
+  modal.style.display = 'block';
+  modal.classList.add('active');
+
+  // Prevent background scrolling
   document.body.style.overflow = 'hidden';
+
+  // Focus on the postal code input field after a short delay
+  setTimeout(() => {
+    const postalInput = document.getElementById('distPostalCode');
+    if (postalInput) {
+      postalInput.focus();
+    }
+  }, 300);
 };
 
+// ========== USE CURRENT LOCATION ==========
+// Use My Location - Get postal code from browser location
+window.useCurrentLocation = function() {
+  console.log('Getting current location...');
+  
+  const btn = document.getElementById('useLocationBtn');
+  const btnText = document.getElementById('locationBtnText') || btn;
+  const postalInput = document.getElementById('distPostalCode');
+  
+  if (!postalInput) {
+    console.error('Postal code input not found');
+    showToast('Error: Form elements not found', 'error');
+    return;
+  }
+  
+  // Check if geolocation is supported
+  if (!navigator.geolocation) {
+    showToast('Geolocation is not supported by your browser', 'error');
+    return;
+  }
+  
+  // Set loading state
+  btn.disabled = true;
+  btnText.textContent = 'Getting location...';
+  
+  // Request location from browser - THIS WILL PROMPT USER
+  navigator.geolocation.getCurrentPosition(
+    // ========== SUCCESS CALLBACK ==========
+    async function(position) {
+      const latitude = position.coords.latitude;
+      const longitude = position.coords.longitude;
+      
+      console.log('Location detected:', { latitude, longitude });
+      
+      // Update button text
+      btnText.textContent = 'Finding postal code...';
+      
+      try {
+        // Call our backend API for reverse geocoding
+        const response = await fetch(`/api/reverse-geocode?lat=${latitude}&lng=${longitude}`);
+        
+        const result = await response.json();
+        
+        console.log('Reverse geocode result:', result);
+        
+        if (!result.success) {
+          throw new Error(result.message || 'Failed to get postal code');
+        }
+        
+        // Fill the postal code input field
+        postalInput.value = result.data.postalCode;
+        
+        // Show success message
+        const address = result.data.buildingName || result.data.address || 'Location';
+        showToast(`Location found: ${address} (${result.data.postalCode})`, 'success');
+        console.log('Postal code set:', result.data.postalCode);
+        
+      } catch (error) {
+        console.error('Geocoding error:', error);
+        showToast(`Failed to get postal code: ${error.message}`, 'error');
+        postalInput.focus();
+      } finally {
+        // Reset button state
+        btn.disabled = false;
+        btnText.textContent = 'Use My Location';
+      }
+    },
+    
+    // ========== ERROR CALLBACK ==========
+    function(error) {
+      console.error('Geolocation error:', error);
+      
+      let errorMessage = '';
+      
+      switch(error.code) {
+        case error.PERMISSION_DENIED:
+          errorMessage = 'Location access denied. Please enable location permissions in your browser settings.';
+          break;
+        case error.POSITION_UNAVAILABLE:
+          errorMessage = 'Location information unavailable. Please try again or enter postal code manually.';
+          break;
+        case error.TIMEOUT:
+          errorMessage = 'Location request timed out. Please try again.';
+          break;
+        default:
+          errorMessage = 'Unable to get your location. Please enter postal code manually.';
+      }
+      
+      showToast(errorMessage, 'error');
+      
+      // Reset button state
+      btn.disabled = false;
+      btnText.textContent = 'Use My Location';
+      
+      // Focus on input for manual entry
+      postalInput.focus();
+    },
+    
+    // ========== GEOLOCATION OPTIONS ==========
+    {
+      enableHighAccuracy: true,  // Request high accuracy GPS
+      timeout: 10000,            // 10 second timeout
+      maximumAge: 0              // Don't use cached position
+    }
+  );
+};
+
+// ========== FIXED EXECUTE DISTANCE SEARCH ==========
 window.executeDistanceSearch = async function () {
-  const postal_code = document.getElementById('distancePostalCode').value.trim();
-  const radius_km = parseFloat(document.getElementById('distanceRadius').value);
+  console.log('Executing distance search...');
 
-  if (!postal_code || postal_code.length !== 6) {
+  // Get references to form input fields
+  const postalInput = document.getElementById('distPostalCode');
+  const radiusInput = document.getElementById('distRadius');
+
+  // Validate that form fields exist
+  if (!postalInput || !radiusInput) {
+    console.error('Form fields not found:', {
+      postalInput: !!postalInput,
+      radiusInput: !!radiusInput
+    });
+    showToast('Error: Form fields not found', 'error');
+    return;
+  }
+
+  // Get values from inputs
+  const postal_code = postalInput.value.trim();
+  const radius_km = parseFloat(radiusInput.value);
+
+  console.log('Search parameters:', { postal_code, radius_km });
+
+  // ===== VALIDATE POSTAL CODE =====
+  // Must be exactly 6 digits
+  if (!postal_code || postal_code.length !== 6 || !/^\d{6}$/.test(postal_code)) {
     showToast('Please enter a valid 6-digit postal code', 'error');
+    postalInput.focus(); // Focus on the input so user can fix it
     return;
   }
 
-  if (!radius_km || radius_km <= 0) {
-    showToast('Please enter a valid radius', 'error');
+  // ===== VALIDATE RADIUS =====
+  // Must be between 0.5 and 20 km
+  if (!radius_km || radius_km < 0.5 || radius_km > 20) {
+    showToast('Please enter a valid radius between 0.5 and 20 km', 'error');
+    radiusInput.focus();
     return;
   }
 
+  // Close the modal
   closeDistanceSearch();
+
+  // Show loading message
   showToast('Searching nearby schools...', 'info');
 
+  // Switch to search view to show results
+  switchView('search');
+
   try {
+    console.log('Sending request to server...');
+
+    // ===== SEND POST REQUEST TO SERVER =====
     const response = await fetch('/api/schools/search-by-postal-code', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ postal_code, radius_km })
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        postal_code,   // The 6-digit postal code
+        radius_km      // The search radius in kilometers
+      })
     });
 
-    const data = await response.json();
+    console.log('Server response status:', response.status);
 
+    // Check if response is successful
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Server error response:', errorText);
+      throw new Error(`Server error: ${response.status} - ${errorText}`);
+    }
+
+    // Parse JSON response
+    const data = await response.json();
+    console.log('Distance search results:', data);
+
+    // Check if search was successful
     if (!data.success) {
       showToast(data.message || 'Search failed', 'error');
+      displayEmptyDistanceResults(postal_code, radius_km);
       return;
     }
 
+    // ===== DISPLAY RESULTS =====
     displayDistanceResults(data.results, data.search_params);
 
+    // Show appropriate success message
     if (data.results.length === 0) {
       showToast('No schools found within the specified radius', 'info');
     } else {
-      showToast(`Found ${data.results.length} school(s) nearby`, 'success');
+      showToast(`Found ${data.results.length} school(s) within ${radius_km}km`, 'success');
     }
 
   } catch (error) {
+    // Handle any errors that occurred during the search
     console.error('Distance search error:', error);
     showToast('Failed to search schools: ' + error.message, 'error');
+    displayEmptyDistanceResults(postal_code, radius_km);
   }
 };
 
 function displayDistanceResults(results, params) {
+  // Get references to result containers
   const resultsTable = document.getElementById('resultsTable');
   const resultsMeta = document.getElementById('resultsMeta');
+  const summary = document.getElementById('universalSearchSummary');
 
-  // Switch to search view if not already there
-  switchView('search');
+  // Validate containers exist
+  if (!resultsTable || !resultsMeta) {
+    console.error('Results containers not found');
+    return;
+  }
 
+  // Hide universal search summary (it's for other search types)
+  if (summary) {
+    summary.style.display = 'none';
+  }
+
+  // ===== UPDATE METADATA =====
+  // Show search parameters and result count
   resultsMeta.textContent = `Found ${results.length} school(s) within ${params.radius_km}km of postal code ${params.postal_code}`;
 
+  // ===== HANDLE EMPTY RESULTS =====
   if (results.length === 0) {
     resultsTable.innerHTML = `
       <div class="empty-state">
@@ -2628,8 +2793,11 @@ function displayDistanceResults(results, params) {
     return;
   }
 
+  // ===== BUILD RESULTS TABLE =====
   let html = '<div style="overflow-x: auto;"><table class="data-table"><thead><tr>';
-  html += '<th>Distance (km)</th>';
+
+  // Table headers
+  html += '<th>Distance</th>';
   html += '<th>School Name</th>';
   html += '<th>Zone</th>';
   html += '<th>Level</th>';
@@ -2637,26 +2805,107 @@ function displayDistanceResults(results, params) {
   html += '<th>Postal Code</th>';
   html += '</tr></thead><tbody>';
 
+  // ===== TABLE ROWS =====
+  // Loop through each school result
   results.forEach(school => {
-    html += `<tr data-clickable="true" onclick='viewItemDetails("schools", ${school.school_id})' style="cursor: pointer;">`;
-    html += `<td><span class="badge" style="background: #DBEAFE; color: #1E40AF; font-weight: 700;">${school.distance_km} km</span></td>`;
+    // Make row clickable to view school details
+    html += `<tr 
+      data-clickable="true" 
+      data-school-id="${school.school_id}" 
+      onclick='viewItemDetails("schools", ${school.school_id})' 
+      style="cursor: pointer;"
+    >`;
+
+    // Distance column (highlighted with badge)
+    html += `<td>
+      <span class="badge" style="background: #DBEAFE; color: #1E40AF; font-weight: 700; font-size: 14px;">
+        ${school.distance_km} km
+      </span>
+    </td>`;
+
+    // School name (bold)
     html += `<td><strong>${school.school_name}</strong></td>`;
-    html += `<td><span class="badge zone-${school.zone_code.toLowerCase()}">${school.zone_code}</span></td>`;
-    html += `<td>${school.mainlevel_code}</td>`;
-    html += `<td>${school.address}</td>`;
-    html += `<td>${school.postal_code}</td>`;
+
+    // Zone badge (colored by zone)
+    html += `<td>
+      <span class="badge zone-${(school.zone_code || '').toLowerCase()}">
+        ${school.zone_code || '-'}
+      </span>
+    </td>`;
+
+    // Level
+    html += `<td>${school.mainlevel_code || '-'}</td>`;
+
+    // Address
+    html += `<td>${school.address || '-'}</td>`;
+
+    // Postal code
+    html += `<td>${school.postal_code || '-'}</td>`;
+
     html += `</tr>`;
   });
 
+  // Close table tags
   html += '</tbody></table></div>';
+
+  // Insert the HTML into the results container
   resultsTable.innerHTML = html;
+
+  console.log(`Displayed ${results.length} schools in results table`);
 }
 
+function displayEmptyDistanceResults(postal_code, radius_km) {
+  // Get references to result containers
+  const resultsTable = document.getElementById('resultsTable');
+  const resultsMeta = document.getElementById('resultsMeta');
+
+  // ===== UPDATE METADATA =====
+  if (resultsMeta) {
+    resultsMeta.textContent = `No schools found within ${radius_km}km of postal code ${postal_code}`;
+  }
+
+  // ===== DISPLAY EMPTY STATE MESSAGE =====
+  if (resultsTable) {
+    resultsTable.innerHTML = `
+      <div class="empty-state">
+        <!-- Empty state icon (circle with plus sign) -->
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+          <circle cx="32" cy="32" r="30" stroke="#E5E7EB" stroke-width="4"/>
+          <path d="M32 20v24M20 32h24" stroke="#E5E7EB" stroke-width="4" stroke-linecap="round"/>
+        </svg>
+        
+        <!-- Main message -->
+        <h3>No schools found</h3>
+        
+        <!-- Helpful suggestion -->
+        <p>Try increasing the search radius or verifying the postal code</p>
+      </div>
+    `;
+  }
+
+  console.log(`Empty state displayed for postal code ${postal_code}, radius ${radius_km}km`);
+}
+
+// ========== CLOSE DISTANCE SEARCH ==========
 window.closeDistanceSearch = function () {
+  console.log('Closing distance search modal');
+
+  // Find the modal element
   const modal = document.getElementById('distanceSearchModal');
+
   if (modal) {
-    modal.remove();
+    // Hide the modal
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+
+    // Restore background scrolling
     document.body.style.overflow = 'auto';
+
+    // Reset the form to clear all inputs
+    const form = document.getElementById('distanceSearchForm');
+    if (form) {
+      form.reset();
+    }
   }
 };
 
