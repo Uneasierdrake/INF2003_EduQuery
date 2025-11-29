@@ -42,10 +42,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'eduquery-secret-key';
 // Generate JWT token
 function generateToken(user) {
   return jwt.sign(
-    { 
-      user_id: user.id, 
-      username: user.username, 
-      is_admin: user.is_admin 
+    {
+      user_id: user.id,
+      username: user.username,
+      is_admin: user.is_admin
     },
     JWT_SECRET,
     { expiresIn: '24h' }
@@ -63,24 +63,24 @@ function verifyToken(token) {
 
 // Authentication middleware for ADMIN API routes only
 const requireAuth = (req, res, next) => {
-  const token = req.headers.authorization?.replace('Bearer ', '') || 
-                req.query.token;
-  
+  const token = req.headers.authorization?.replace('Bearer ', '') ||
+    req.query.token;
+
   if (!token) {
-    return res.status(401).json({ 
-      success: false, 
-      message: 'Authentication token required' 
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication token required'
     });
   }
-  
+
   const decoded = verifyToken(token);
   if (!decoded) {
-    return res.status(401).json({ 
-      success: false, 
-      message: 'Invalid or expired token' 
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid or expired token'
     });
   }
-  
+
   req.user = decoded;
   next();
 };
@@ -257,9 +257,9 @@ app.delete('/api/schools/:id', async (req, res) => {
 
 // Get school subjects by ID
 app.get('/api/schools/:id/subjects', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const result = await pool.query(`
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
             SELECT DISTINCT subj.subject_desc
             FROM school_subjects ss
             JOIN subjects subj ON ss.subject_id = subj.subject_id
@@ -269,19 +269,19 @@ app.get('/api/schools/:id/subjects', async (req, res) => {
             AND UPPER(subj.subject_desc) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-')
             ORDER BY subj.subject_desc
         `, [id]);
-        
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Get school subjects error:', err);
-        res.status(500).json({ error: err.message });
-    }
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get school subjects error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get school CCAs by ID
 app.get('/api/schools/:id/ccas', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const result = await pool.query(`
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
             SELECT 
                 c.cca_grouping_desc,
                 c.cca_generic_name,
@@ -294,19 +294,19 @@ app.get('/api/schools/:id/ccas', async (req, res) => {
             AND TRIM(c.cca_grouping_desc) != ''
             ORDER BY c.cca_generic_name, c.cca_grouping_desc
         `, [id]);
-        
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Get school CCAs error:', err);
-        res.status(500).json({ error: err.message });
-    }
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get school CCAs error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get school programmes by ID
 app.get('/api/schools/:id/programmes', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const result = await pool.query(`
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
             SELECT DISTINCT p.moe_programme_desc
             FROM school_programmes sp
             JOIN programmes p ON sp.programme_id = p.programme_id
@@ -315,19 +315,19 @@ app.get('/api/schools/:id/programmes', async (req, res) => {
             AND TRIM(p.moe_programme_desc) != ''
             ORDER BY p.moe_programme_desc
         `, [id]);
-        
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Get school programmes error:', err);
-        res.status(500).json({ error: err.message });
-    }
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get school programmes error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get school distinctive programmes by ID
 app.get('/api/schools/:id/distinctives', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const result = await pool.query(`
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
             SELECT DISTINCT
                 d.alp_domain,
                 d.alp_title,
@@ -338,12 +338,12 @@ app.get('/api/schools/:id/distinctives', async (req, res) => {
             WHERE sd.school_id = $1
             ORDER BY d.alp_title, d.llp_title
         `, [id]);
-        
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Get school distinctives error:', err);
-        res.status(500).json({ error: err.message });
-    }
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get school distinctives error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ========== GET SCHOOL DETAILS BY ID ==========
@@ -405,7 +405,232 @@ app.get('/api/schools/:id/details', async (req, res) => {
       error: err.message
     });
   }
-}); 
+});
+
+// ========== HELPER FUNCTION: Convert Singapore Postal Code to Coordinates ==========
+async function getCoordinatesFromPostalCode(postalCode) {
+  try {
+    // Use Singapore's OneMap API (free, no auth required)
+    const response = await fetch(
+      `https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${postalCode}&returnGeom=Y&getAddrDetails=Y&pageNum=1`
+    );
+    
+    const data = await response.json();
+    
+    if (data.found === 0 || !data.results || data.results.length === 0) {
+      return null;
+    }
+    
+    const result = data.results[0];
+    return {
+      latitude: parseFloat(result.LATITUDE),
+      longitude: parseFloat(result.LONGITUDE),
+      address: result.ADDRESS
+    };
+  } catch (error) {
+    console.error('OneMap API error:', error);
+    return null;
+  }
+}
+
+// ========== SEARCH BY POSTAL CODE DISTANCE (Using OneMap API) ==========
+app.post('/api/schools/search-by-postal-code', async (req, res) => {
+  try {
+    const { postal_code, radius_km } = req.body;
+
+    console.log('Postal code search request:', { postal_code, radius_km });
+
+    if (!postal_code || !radius_km) {
+      return res.status(400).json({
+        success: false,
+        message: 'Postal code and radius are required'
+      });
+    }
+
+    // Validate postal code format (Singapore postal codes are 6 digits)
+    if (!/^\d{6}$/.test(postal_code)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid postal code format. Singapore postal codes must be 6 digits.'
+      });
+    }
+
+    // Get coordinates for the search postal code using OneMap API
+    console.log('Fetching coordinates from OneMap API...');
+    const searchLocation = await getCoordinatesFromPostalCode(postal_code);
+    
+    if (!searchLocation) {
+      return res.status(404).json({
+        success: false,
+        message: `Postal code ${postal_code} not found. Please verify the postal code is correct.`
+      });
+    }
+    
+    const { latitude: searchLat, longitude: searchLon } = searchLocation;
+    console.log('Search center coordinates:', { searchLat, searchLon });
+
+    // Get all schools with their postal codes
+    const schoolsQuery = `
+      SELECT 
+        s.school_id,
+        s.school_name,
+        s.address,
+        s.postal_code,
+        s.zone_code,
+        s.mainlevel_code,
+        s.principal_name,
+        r.email_address,
+        r.telephone_no,
+        r.type_code,
+        r.nature_code
+      FROM Schools s
+      LEFT JOIN raw_general_info r ON LOWER(TRIM(s.school_name)) = LOWER(TRIM(r.school_name))
+      WHERE s.postal_code IS NOT NULL 
+        AND s.postal_code != ''
+        AND s.postal_code ~ '^[0-9]{6}$'
+      ORDER BY s.school_name
+    `;
+
+    const schoolsResult = await pool.query(schoolsQuery);
+    console.log(`Found ${schoolsResult.rows.length} schools with valid postal codes`);
+
+    // Calculate distances for each school
+    const schoolsWithDistance = [];
+    let coordinateFetchCount = 0;
+    const maxConcurrentRequests = 5; // Limit concurrent API calls
+    
+    // Process schools in batches to avoid rate limiting
+    for (let i = 0; i < schoolsResult.rows.length; i += maxConcurrentRequests) {
+      const batch = schoolsResult.rows.slice(i, i + maxConcurrentRequests);
+      
+      const batchResults = await Promise.all(
+        batch.map(async (school) => {
+          try {
+            const schoolCoords = await getCoordinatesFromPostalCode(school.postal_code);
+            
+            if (!schoolCoords) {
+              return null;
+            }
+            
+            coordinateFetchCount++;
+            
+            // Calculate distance using Haversine formula
+            const R = 6371; // Earth's radius in km
+            const dLat = (schoolCoords.latitude - searchLat) * Math.PI / 180;
+            const dLon = (schoolCoords.longitude - searchLon) * Math.PI / 180;
+            
+            const a = 
+              Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(searchLat * Math.PI / 180) * Math.cos(schoolCoords.latitude * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const distance = R * c;
+            
+            if (distance <= radius_km) {
+              return {
+                ...school,
+                distance_km: Math.round(distance * 100) / 100
+              };
+            }
+            
+            return null;
+          } catch (error) {
+            console.error(`Error processing school ${school.school_name}:`, error);
+            return null;
+          }
+        })
+      );
+      
+      // Add non-null results to the array
+      schoolsWithDistance.push(...batchResults.filter(r => r !== null));
+      
+      // Add a small delay between batches to be nice to the API
+      if (i + maxConcurrentRequests < schoolsResult.rows.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    // Sort by distance
+    schoolsWithDistance.sort((a, b) => a.distance_km - b.distance_km);
+
+    console.log(`Found ${schoolsWithDistance.length} schools within ${radius_km}km`);
+    console.log(`Fetched coordinates for ${coordinateFetchCount} schools`);
+
+    logActivity('search_by_postal_code', {
+      postal_code,
+      radius_km,
+      results_count: schoolsWithDistance.length,
+      schools_processed: schoolsResult.rows.length,
+      coordinates_fetched: coordinateFetchCount
+    });
+
+    res.json({
+      success: true,
+      results: schoolsWithDistance,
+      search_params: {
+        postal_code,
+        radius_km,
+        center_latitude: searchLat,
+        center_longitude: searchLon,
+        center_address: searchLocation.address
+      },
+      metadata: {
+        schools_processed: schoolsResult.rows.length,
+        coordinates_fetched: coordinateFetchCount,
+        note: 'Coordinates fetched from Singapore OneMap API'
+      }
+    });
+
+  } catch (err) {
+    console.error('Postal code distance search error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      hint: 'Please try again or contact support if the problem persists'
+    });
+  }
+});
+
+// ========== POSTAL CODE LOOKUP ENDPOINT ==========
+app.get('/api/postal-code/:postalCode', async (req, res) => {
+  try {
+    const { postalCode } = req.params;
+    
+    console.log('Looking up postal code:', postalCode);
+    
+    if (!/^\d{6}$/.test(postalCode)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid postal code format. Singapore postal codes must be 6 digits.'
+      });
+    }
+    
+    const coordinates = await getCoordinatesFromPostalCode(postalCode);
+    
+    if (!coordinates) {
+      return res.status(404).json({
+        success: false,
+        message: 'Postal code not found or coordinates not available'
+      });
+    }
+    
+    res.json({
+      success: true,
+      postal_code: postalCode,
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
+      address: coordinates.address
+    });
+    
+  } catch (err) {
+    console.error('Postal code lookup error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
 
 // ========== READ-ONLY QUERY ROUTES ==========
 
@@ -1023,9 +1248,9 @@ app.get('/api/search/universal', async (req, res) => {
 // Middleware to check if user is admin (requires requireAuth first)
 const requireAdmin = (req, res, next) => {
   if (!req.user || !req.user.is_admin) {
-    return res.status(403).json({ 
-      success: false, 
-      message: 'Admin privileges required' 
+    return res.status(403).json({
+      success: false,
+      message: 'Admin privileges required'
     });
   }
   next();
@@ -1121,7 +1346,7 @@ app.post('/api/schools/compare', async (req, res) => {
 
     // Fetch all data in parallel
     const [
-      school1Result, 
+      school1Result,
       school2Result,
       subjects1,
       subjects2,
@@ -1186,166 +1411,6 @@ app.post('/api/schools/compare', async (req, res) => {
   }
 });
 
-// ========== POSTAL CODE TO COORDINATES LOOKUP ==========
-// Add this helper endpoint for postal code conversion
-app.get('/api/postal-code/:postalCode', async (req, res) => {
-  try {
-    const { postalCode } = req.params;
-    
-    // Query to find coordinates from raw_general_info using postal code
-    const query = `
-      SELECT DISTINCT
-        postal_code,
-        latitude::decimal as latitude,
-        longitude::decimal as longitude,
-        school_name
-      FROM raw_general_info
-      WHERE postal_code = $1
-        AND latitude IS NOT NULL 
-        AND longitude IS NOT NULL
-        AND latitude != 'NA'
-        AND longitude != 'NA'
-      LIMIT 1
-    `;
-    
-    const result = await pool.query(query, [postalCode]);
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Postal code not found or no coordinates available'
-      });
-    }
-    
-    res.json({
-      success: true,
-      postal_code: postalCode,
-      latitude: parseFloat(result.rows[0].latitude),
-      longitude: parseFloat(result.rows[0].longitude)
-    });
-    
-  } catch (err) {
-    console.error('Postal code lookup error:', err);
-    res.status(500).json({
-      success: false,
-      error: err.message
-    });
-  }
-});
-
-// ========== SEARCH BY POSTAL CODE DISTANCE ==========
-app.post('/api/schools/search-by-postal-code', async (req, res) => {
-  try {
-    const { postal_code, radius_km } = req.body;
-
-    if (!postal_code || !radius_km) {
-      return res.status(400).json({
-        success: false,
-        message: 'Postal code and radius are required'
-      });
-    }
-
-    // First, get coordinates for the postal code
-    const coordsQuery = `
-      SELECT DISTINCT
-        latitude::decimal as lat,
-        longitude::decimal as lon
-      FROM raw_general_info
-      WHERE postal_code = $1
-        AND latitude IS NOT NULL 
-        AND longitude IS NOT NULL
-        AND latitude != 'NA'
-        AND longitude != 'NA'
-      LIMIT 1
-    `;
-    
-    const coordsResult = await pool.query(coordsQuery, [postal_code]);
-    
-    if (coordsResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Postal code not found or coordinates not available'
-      });
-    }
-    
-    const { lat, lon } = coordsResult.rows[0];
-
-    // Now search for schools within radius using Haversine formula
-    const query = `
-      WITH school_coordinates AS (
-        SELECT 
-          s.*,
-          r.latitude::decimal as school_lat,
-          r.longitude::decimal as school_lon,
-          r.email_address,
-          r.telephone_no,
-          r.type_code,
-          r.nature_code
-        FROM Schools s
-        LEFT JOIN raw_general_info r ON LOWER(s.school_name) = LOWER(r.school_name)
-        WHERE r.latitude IS NOT NULL 
-          AND r.longitude IS NOT NULL
-          AND r.latitude != 'NA'
-          AND r.longitude != 'NA'
-      ),
-      distances AS (
-        SELECT 
-          *,
-          (
-            6371 * acos(
-              cos(radians($1)) * cos(radians(school_lat)) *
-              cos(radians(school_lon) - radians($2)) +
-              sin(radians($1)) * sin(radians(school_lat))
-            )
-          ) AS distance_km
-        FROM school_coordinates
-      )
-      SELECT 
-        school_id,
-        school_name,
-        address,
-        postal_code,
-        zone_code,
-        mainlevel_code,
-        principal_name,
-        email_address,
-        telephone_no,
-        type_code,
-        nature_code,
-        ROUND(distance_km::numeric, 2) as distance_km
-      FROM distances
-      WHERE distance_km <= $3
-      ORDER BY distance_km ASC
-      LIMIT 100
-    `;
-
-    const result = await pool.query(query, [lat, lon, radius_km]);
-
-    logActivity('search_by_postal_code', {
-      postal_code,
-      radius_km,
-      results_count: result.rows.length
-    });
-
-    res.json({
-      success: true,
-      results: result.rows,
-      search_params: {
-        postal_code,
-        radius_km,
-        center_latitude: lat,
-        center_longitude: lon
-      }
-    });
-
-  } catch (err) {
-    console.error('Postal code distance search error:', err);
-    res.status(500).json({
-      success: false,
-      error: err.message
-    });
-  }
-});
 // ========== MONGODB ACTIVITY LOGGER ==========
 async function logActivity(action, data) {
   try {
@@ -1389,125 +1454,125 @@ app.get('/home.html', (req, res) => {
 
 // Serve login page
 app.get('/login.html', (req, res) => {
-    console.log('Serving login page');
-    res.sendFile(path.join(__dirname, '../frontend/login.html'));
+  console.log('Serving login page');
+  res.sendFile(path.join(__dirname, '../frontend/login.html'));
 });
 
 // Serve login page assets (CSS, JS)
 app.get('/login.js', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/login.js'));
+  res.sendFile(path.join(__dirname, '../frontend/login.js'));
 });
 
 app.get('/style.css', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/style.css'));
+  res.sendFile(path.join(__dirname, '../frontend/style.css'));
 });
 
 // Login authentication route
 app.post('/login', async (req, res) => {
-    try {
-        console.log('Login request received:', { 
-            username: req.body.username,
-            timestamp: new Date().toISOString()
-        });
-        
-        const { username, password } = req.body;
+  try {
+    console.log('Login request received:', {
+      username: req.body.username,
+      timestamp: new Date().toISOString()
+    });
 
-        if (!username || !password) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Username and password are required' 
-            });
-        }
+    const { username, password } = req.body;
 
-        console.log('Login attempt for username:', username);
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username and password are required'
+      });
+    }
 
-        // Query the database for the user
-        const result = await pool.query(
-            `SELECT id, username, password, is_admin
+    console.log('Login attempt for username:', username);
+
+    // Query the database for the user
+    const result = await pool.query(
+      `SELECT id, username, password, is_admin
              FROM Users 
              WHERE username = $1`,
-            [username]
-        );
+      [username]
+    );
 
-        if (result.rows.length === 0) {
-            console.log('User not found:', username);
-            return res.status(401).json({ 
-                success: false, 
-                message: 'Invalid username or password' 
-            });
-        }
-
-        const user = result.rows[0];
-
-        // Verify password using bcrypt
-        const isPasswordValid = await passwordUtils.verifyPassword(password, user.password);
-        
-        if (!isPasswordValid) {
-            console.log('Invalid password for user:', username);
-            return res.status(401).json({ 
-                success: false, 
-                message: 'Invalid username or password' 
-            });
-        }
-
-        // Login successful - generate JWT token
-        const userData = {
-            user_id: user.id,
-            username: user.username,
-            is_admin: user.is_admin
-        };
-
-        const token = generateToken(userData);
-
-        console.log('✅ Login successful for user:', username, 'Admin:', user.is_admin);
-
-        // Log the login activity
-        logActivity('user_login', { 
-            user_id: user.id,
-            username: user.username,
-            is_admin: user.is_admin
-        });
-
-        // Return success response
-        res.json({
-            success: true,
-            message: 'Login successful',
-            user: userData,
-            token: token,
-            redirectUrl: '/index.html' // Redirect back to main app
-        });
-
-    } catch (error) {
-        console.error('Login error:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Server error during authentication' 
-        });
+    if (result.rows.length === 0) {
+      console.log('User not found:', username);
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid username or password'
+      });
     }
+
+    const user = result.rows[0];
+
+    // Verify password using bcrypt
+    const isPasswordValid = await passwordUtils.verifyPassword(password, user.password);
+
+    if (!isPasswordValid) {
+      console.log('Invalid password for user:', username);
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid username or password'
+      });
+    }
+
+    // Login successful - generate JWT token
+    const userData = {
+      user_id: user.id,
+      username: user.username,
+      is_admin: user.is_admin
+    };
+
+    const token = generateToken(userData);
+
+    console.log('✅ Login successful for user:', username, 'Admin:', user.is_admin);
+
+    // Log the login activity
+    logActivity('user_login', {
+      user_id: user.id,
+      username: user.username,
+      is_admin: user.is_admin
+    });
+
+    // Return success response
+    res.json({
+      success: true,
+      message: 'Login successful',
+      user: userData,
+      token: token,
+      redirectUrl: '/index.html' // Redirect back to main app
+    });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during authentication'
+    });
+  }
 });
 
 // Check authentication status (for client-side verification)
 app.get('/api/auth/status', requireAuth, (req, res) => {
-    res.json({
-        authenticated: true,
-        user: {
-            id: req.user.id,
-            username: req.user.username,
-            is_admin: req.user.is_admin
-        }
-    });
+  res.json({
+    authenticated: true,
+    user: {
+      id: req.user.id,
+      username: req.user.username,
+      is_admin: req.user.is_admin
+    }
+  });
 });
 
 // Logout route
 app.post('/api/auth/logout', requireAuth, (req, res) => {
-    console.log('Logout request for user:', req.user.username);
-    
-    // In a stateless JWT system, we can't invalidate the token on server side
-    // Client should remove the token from localStorage
-    res.json({
-        success: true,
-        message: 'Logout successful'
-    });
+  console.log('Logout request for user:', req.user.username);
+
+  // In a stateless JWT system, we can't invalidate the token on server side
+  // Client should remove the token from localStorage
+  res.json({
+    success: true,
+    message: 'Logout successful'
+  });
 });
 
 // ========== ADMIN-ONLY ROUTES (Still protected) ==========
@@ -1518,16 +1583,16 @@ app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
     const result = await pool.query(
       'SELECT id, username, is_admin, created_at FROM Users ORDER BY created_at DESC'
     );
-    
+
     res.json({
       success: true,
       users: result.rows
     });
   } catch (error) {
     console.error('Get users error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error fetching users' 
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching users'
     });
   }
 });
@@ -1538,9 +1603,9 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
     const { username, password, is_admin = false } = req.body;
 
     if (!username || !password) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Username and password are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Username and password are required'
       });
     }
 
@@ -1551,9 +1616,9 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
     );
 
     if (existingUser.rows.length > 0) {
-      return res.status(409).json({ 
-        success: false, 
-        message: 'Username already exists' 
+      return res.status(409).json({
+        success: false,
+        message: 'Username already exists'
       });
     }
 
@@ -1570,7 +1635,7 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
 
     const newUser = result.rows[0];
 
-    logActivity('admin_create_user', { 
+    logActivity('admin_create_user', {
       admin_id: req.user.id,
       admin_username: req.user.username,
       new_user_id: newUser.id,
@@ -1586,9 +1651,9 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
 
   } catch (error) {
     console.error('Create user error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error creating user' 
+    res.status(500).json({
+      success: false,
+      message: 'Error creating user'
     });
   }
 });
@@ -1600,9 +1665,9 @@ app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) =
 
     // Prevent admin from deleting themselves
     if (parseInt(id) === req.user.id) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Cannot delete your own account' 
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete your own account'
       });
     }
 
@@ -1612,13 +1677,13 @@ app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) =
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
       });
     }
 
-    logActivity('admin_delete_user', { 
+    logActivity('admin_delete_user', {
       admin_id: req.user.id,
       admin_username: req.user.username,
       deleted_user_id: id,
@@ -1632,9 +1697,9 @@ app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) =
 
   } catch (error) {
     console.error('Delete user error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error deleting user' 
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting user'
     });
   }
 });
@@ -1647,9 +1712,9 @@ app.put('/api/admin/users/:id/role', requireAuth, requireAdmin, async (req, res)
 
     // Prevent admin from changing their own role
     if (parseInt(id) === req.user.id) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Cannot change your own role' 
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot change your own role'
       });
     }
 
@@ -1661,15 +1726,15 @@ app.put('/api/admin/users/:id/role', requireAuth, requireAdmin, async (req, res)
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
       });
     }
 
     const updatedUser = result.rows[0];
 
-    logActivity('admin_update_user_role', { 
+    logActivity('admin_update_user_role', {
       admin_id: req.user.id,
       admin_username: req.user.username,
       updated_user_id: updatedUser.id,
@@ -1685,9 +1750,9 @@ app.put('/api/admin/users/:id/role', requireAuth, requireAdmin, async (req, res)
 
   } catch (error) {
     console.error('Update user role error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error updating user role' 
+    res.status(500).json({
+      success: false,
+      message: 'Error updating user role'
     });
   }
 });
@@ -1720,9 +1785,9 @@ app.get('/api/schools', async (req, res) => {
 
     // Log search activity to MongoDB
     if (name) {
-      logActivity('search_schools', { 
-        query: name, 
-        results_count: result.rows.length 
+      logActivity('search_schools', {
+        query: name,
+        results_count: result.rows.length
       });
     }
 
@@ -1850,9 +1915,9 @@ app.delete('/api/schools/:id', requireAuth, requireAdmin, async (req, res) => {
 
 // Get school subjects by ID (PUBLIC)
 app.get('/api/schools/:id/subjects', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const result = await pool.query(`
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
             SELECT DISTINCT subj.subject_desc
             FROM school_subjects ss
             JOIN subjects subj ON ss.subject_id = subj.subject_id
@@ -1862,19 +1927,19 @@ app.get('/api/schools/:id/subjects', async (req, res) => {
             AND UPPER(subj.subject_desc) NOT IN ('NA', 'N/A', 'NIL', 'NONE', '-')
             ORDER BY subj.subject_desc
         `, [id]);
-        
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Get school subjects error:', err);
-        res.status(500).json({ error: err.message });
-    }
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get school subjects error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get school CCAs by ID (PUBLIC)
 app.get('/api/schools/:id/ccas', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const result = await pool.query(`
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
             SELECT 
                 c.cca_generic_name,
                 c.cca_grouping_desc,
@@ -1887,19 +1952,19 @@ app.get('/api/schools/:id/ccas', async (req, res) => {
             AND TRIM(c.cca_generic_name) != ''
             ORDER BY c.cca_grouping_desc, c.cca_generic_name
         `, [id]);
-        
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Get school CCAs error:', err);
-        res.status(500).json({ error: err.message });
-    }
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get school CCAs error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get school programmes by ID (PUBLIC)
 app.get('/api/schools/:id/programmes', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const result = await pool.query(`
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
             SELECT DISTINCT p.moe_programme_desc
             FROM school_programmes sp
             JOIN programmes p ON sp.programme_id = p.programme_id
@@ -1908,19 +1973,19 @@ app.get('/api/schools/:id/programmes', async (req, res) => {
             AND TRIM(p.moe_programme_desc) != ''
             ORDER BY p.moe_programme_desc
         `, [id]);
-        
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Get school programmes error:', err);
-        res.status(500).json({ error: err.message });
-    }
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get school programmes error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get school distinctive programmes by ID (PUBLIC)
 app.get('/api/schools/:id/distinctives', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const result = await pool.query(`
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
             SELECT DISTINCT
                 d.alp_domain,
                 d.alp_title,
@@ -1931,12 +1996,12 @@ app.get('/api/schools/:id/distinctives', async (req, res) => {
             WHERE sd.school_id = $1
             ORDER BY d.alp_title, d.llp_title
         `, [id]);
-        
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Get school distinctives error:', err);
-        res.status(500).json({ error: err.message });
-    }
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get school distinctives error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ========== GET SCHOOL DETAILS BY ID (PUBLIC) ==========
@@ -2030,9 +2095,9 @@ app.get('/api/schools/subjects', async (req, res) => {
       [`%${name}%`]
     );
 
-    logActivity('search_subjects', { 
-      query: name, 
-      results_count: result.rows.length 
+    logActivity('search_subjects', {
+      query: name,
+      results_count: result.rows.length
     });
 
     res.json(result.rows);
@@ -2074,9 +2139,9 @@ app.get('/api/schools/ccas', async (req, res) => {
       [`%${name}%`]
     );
 
-    logActivity('search_ccas', { 
-      query: name, 
-      results_count: result.rows.length 
+    logActivity('search_ccas', {
+      query: name,
+      results_count: result.rows.length
     });
 
     res.json(result.rows);
@@ -2114,9 +2179,9 @@ app.get('/api/schools/programmes', async (req, res) => {
       [`%${name}%`]
     );
 
-    logActivity('search_programmes', { 
-      query: name, 
-      results_count: result.rows.length 
+    logActivity('search_programmes', {
+      query: name,
+      results_count: result.rows.length
     });
 
     res.json(result.rows);
@@ -2164,9 +2229,9 @@ app.get('/api/schools/distinctives', async (req, res) => {
       [`%${name}%`]
     );
 
-    logActivity('search_distinctives', { 
-      query: name, 
-      results_count: result.rows.length 
+    logActivity('search_distinctives', {
+      query: name,
+      results_count: result.rows.length
     });
 
     res.json(result.rows);
@@ -3203,9 +3268,9 @@ app.get('/api/user/profile', requireAuth, async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
       });
     }
 
@@ -3216,9 +3281,9 @@ app.get('/api/user/profile', requireAuth, async (req, res) => {
 
   } catch (error) {
     console.error('Get profile error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error fetching profile' 
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching profile'
     });
   }
 });
@@ -3229,9 +3294,9 @@ app.put('/api/user/password', requireAuth, async (req, res) => {
     const { currentPassword, newPassword } = req.body;
 
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Current password and new password are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Current password and new password are required'
       });
     }
 
@@ -3245,11 +3310,11 @@ app.put('/api/user/password', requireAuth, async (req, res) => {
 
     // Verify current password
     const isCurrentPasswordValid = await passwordUtils.verifyPassword(currentPassword, user.password);
-    
+
     if (!isCurrentPasswordValid) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Current password is incorrect' 
+      return res.status(401).json({
+        success: false,
+        message: 'Current password is incorrect'
       });
     }
 
@@ -3262,7 +3327,7 @@ app.put('/api/user/password', requireAuth, async (req, res) => {
       [newHashedPassword, req.user.id]
     );
 
-    logActivity('user_password_change', { 
+    logActivity('user_password_change', {
       user_id: req.user.id,
       username: req.user.username
     });
@@ -3274,9 +3339,9 @@ app.put('/api/user/password', requireAuth, async (req, res) => {
 
   } catch (error) {
     console.error('Update password error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error updating password' 
+    res.status(500).json({
+      success: false,
+      message: 'Error updating password'
     });
   }
 });
