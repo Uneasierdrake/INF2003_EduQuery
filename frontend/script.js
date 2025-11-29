@@ -1706,18 +1706,14 @@ window.showAddModal = function () {
     return;
   }
 
-  console.log('Opening add modal');
   const modal = document.getElementById('addModal');
   if (modal) {
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
-  } else {
-    console.error('Modal not found');
   }
 };
 
 window.hideAddModal = function () {
-  console.log('Closing add modal');
   const modal = document.getElementById('addModal');
   if (modal) {
     modal.classList.remove('active');
@@ -1728,38 +1724,183 @@ window.hideAddModal = function () {
 
 // Edit Modal Management
 window.showEditModal = function (school) {
-  // Check if user is admin
   if (!isUserAdmin()) {
     showToast('Admin privileges required to edit schools', 'error');
     return;
   }
 
-  console.log('Opening edit modal for school:', school);
   const modal = document.getElementById('editModal');
-  if (modal) {
-    // Populate the form with school data
-    document.getElementById('editSchoolId').value = school.school_id;
-    document.getElementById('editSchoolName').value = school.school_name;
-    document.getElementById('editAddress').value = school.address;
-    document.getElementById('editPostalCode').value = school.postal_code;
-    document.getElementById('editZoneCode').value = school.zone_code;
-    document.getElementById('editMainlevelCode').value = school.mainlevel_code;
-    document.getElementById('editPrincipalName').value = school.principal_name;
-
-    modal.classList.add('active');
-    document.body.style.overflow = 'hidden';
-  } else {
+  if (!modal) {
     console.error('Edit modal not found');
+    return;
   }
+
+  // Basic info
+  document.getElementById('editSchoolId').value        = school.school_id || '';
+  document.getElementById('editSchoolName').value      = school.school_name || '';
+  document.getElementById('editPrincipalName').value   = school.principal_name || '';
+  document.getElementById('editAddress').value         = school.address || '';
+  document.getElementById('editPostalCode').value      = school.postal_code || '';
+  document.getElementById('editZoneCode').value        = school.zone_code || '';
+  document.getElementById('editMainlevelCode').value   = school.mainlevel_code || '';
+
+  // Additional info
+  document.getElementById('editEmailAddress').value    = school.email_address || '';
+  document.getElementById('editTelephoneNo').value     = school.telephone_no || '';
+  document.getElementById('editTypeCode').value        = school.type_code || '';
+  document.getElementById('editNatureCode').value      = school.nature_code || '';
+  document.getElementById('editSessionCode').value     = school.session_code || '';
+  document.getElementById('editMrtDesc').value         = school.mrt_desc || '';
+  document.getElementById('editBusDesc').value         = school.bus_desc || '';
+
+  // Show modal – **only via class**, no inline display
+  modal.style.display = '';           // clear any previous inline styles
+  modal.classList.add('active');
+  document.body.style.overflow = 'hidden';
 };
 
 window.hideEditModal = function () {
-  console.log('Closing edit modal');
   const modal = document.getElementById('editModal');
   if (modal) {
     modal.classList.remove('active');
-    document.getElementById('editSchoolForm').reset();
+    modal.style.display = '';         // let CSS `.modal` / `.modal.active` control it
     document.body.style.overflow = 'auto';
+  }
+};
+
+
+// Delete Modal Management
+window.showDeleteModal = function (schoolId, schoolName) {
+  if (!isUserAdmin()) {
+    showToast('Admin privileges required to delete schools', 'error');
+    return;
+  }
+
+  const modal = document.getElementById('deleteModal');
+  if (modal) {
+    pendingDeleteId = schoolId;
+    pendingDeleteName = schoolName;
+
+    document.getElementById('deleteSchoolName').textContent = schoolName;
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+};
+
+window.hideDeleteModal = function () {
+  const modal = document.getElementById('deleteModal');
+  if (modal) {
+    modal.classList.remove('active');
+    pendingDeleteId = null;
+    pendingDeleteName = null;
+    document.body.style.overflow = 'auto';
+  }
+};
+
+// Edit entry point used by the View card buttons
+window.editSchool = function (school) {
+  // just delegate to the modal
+  showEditModal(school);
+};
+
+// Update Operation (form submission)
+window.updateSchool = async function (event) {
+  event.preventDefault();
+
+  if (!isUserAdmin()) {
+    showToast('Admin privileges required to edit schools', 'error');
+    return;
+  }
+
+  const schoolId = document.getElementById('editSchoolId').value;
+
+  const updatedData = {
+    school_name: document.getElementById('editSchoolName').value.trim(),
+    principal_name: document.getElementById('editPrincipalName').value.trim(),
+    address: document.getElementById('editAddress').value.trim(),
+    postal_code: document.getElementById('editPostalCode').value.trim(),
+    zone_code: document.getElementById('editZoneCode').value,
+    mainlevel_code: document.getElementById('editMainlevelCode').value,
+
+    email_address: document.getElementById('editEmailAddress').value.trim(),
+    telephone_no: document.getElementById('editTelephoneNo').value.trim(),
+    type_code: document.getElementById('editTypeCode').value,
+    nature_code: document.getElementById('editNatureCode').value,
+    session_code: document.getElementById('editSessionCode').value,
+    mrt_desc: document.getElementById('editMrtDesc').value.trim(),
+    bus_desc: document.getElementById('editBusDesc').value.trim()
+  };
+
+  try {
+    const res = await fetch(`/api/schools/${schoolId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(updatedData)
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      showToast('Admin privileges required to edit schools', 'error');
+      return;
+    }
+
+    const result = await res.json();
+
+    if (result.success || res.ok) {
+      showToast('✓ School updated successfully!', 'success');
+      hideEditModal();
+      runQuery(); // refresh search results
+    } else {
+      showToast('Error: ' + (result.error || 'Failed to update school'), 'error');
+    }
+  } catch (err) {
+    console.error('Update school error:', err);
+    showToast('Error: ' + err.message, 'error');
+  }
+};
+
+// Delete Operation - Now uses modal
+window.deleteSchool = function (schoolId, schoolName) {
+  if (!isUserAdmin()) {
+    showToast('Admin privileges required to delete schools', 'error');
+    return;
+  }
+
+  showDeleteModal(schoolId, schoolName);
+};
+
+// Confirm Delete Operation
+window.confirmDelete = async function () {
+  if (!isUserAdmin()) {
+    showToast('Admin privileges required to delete schools', 'error');
+    return;
+  }
+
+  if (!pendingDeleteId) return;
+
+  try {
+    const res = await fetch(`/api/schools/${pendingDeleteId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      showToast('Admin privileges required to delete schools', 'error');
+      return;
+    }
+
+    const result = await res.json();
+
+    if (result.success || res.ok) {
+      showToast('✓ School deleted successfully!', 'success');
+      hideDeleteModal();
+      runQuery();
+      loadSchoolStats();
+    } else {
+      showToast('Error: ' + (result.error || 'Failed to delete school'), 'error');
+    }
+  } catch (err) {
+    console.error('Delete school error:', err);
+    showToast('Error: ' + err.message, 'error');
   }
 };
 
@@ -1875,55 +2016,63 @@ window.editSchool = function (school) {
 };
 
 // Update Operation (form submission)
-window.updateSchool = async function (event) {
-  event.preventDefault();
-
-  // Check if user is admin
-  if (!isUserAdmin()) {
-    showToast('Admin privileges required to edit schools', 'error');
-    return;
-  }
-
-  console.log('Updating school...');
-
+window.updateSchool = async function () {
   const schoolId = document.getElementById('editSchoolId').value;
+
   const updatedData = {
-    school_name: document.getElementById('editSchoolName').value,
-    address: document.getElementById('editAddress').value,
-    postal_code: document.getElementById('editPostalCode').value,
+    school_name: document.getElementById('editSchoolName').value.trim(),
+    principal_name: document.getElementById('editPrincipalName').value.trim(),
+    address: document.getElementById('editAddress').value.trim(),
+    postal_code: document.getElementById('editPostalCode').value.trim(),
     zone_code: document.getElementById('editZoneCode').value,
     mainlevel_code: document.getElementById('editMainlevelCode').value,
-    principal_name: document.getElementById('editPrincipalName').value
+
+    // contact / type / transport
+    email_address: document.getElementById('editEmailAddress').value.trim(),
+    telephone_no: document.getElementById('editTelephoneNo').value.trim(),
+    type_code: document.getElementById('editTypeCode').value,
+    nature_code: document.getElementById('editNatureCode').value,
+    session_code: document.getElementById('editSessionCode').value,
+    mrt_desc: document.getElementById('editMrtDesc').value.trim(),
+    bus_desc: document.getElementById('editBusDesc').value.trim()
   };
 
-  console.log('Updated data:', updatedData);
-
   try {
+    console.log('Updated data:', updatedData);
+
     const res = await fetch(`/api/schools/${schoolId}`, {
       method: 'PUT',
-      headers: getAuthHeaders(),
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders()
+      },
       body: JSON.stringify(updatedData)
     });
 
-    if (res.status === 401 || res.status === 403) {
-      showToast('Admin privileges required to edit schools', 'error');
-      return;
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      throw new Error(data.error || 'Failed to update school');
     }
 
-    const result = await res.json();
+    showToast('School updated successfully', 'success');
+    hideEditModal();
 
-    if (result.success || res.ok) {
-      showToast('✓ School updated successfully!', 'success');
-      hideEditModal();
-      runQuery(); // Refresh results
-    } else {
-      showToast('Error: ' + (result.error || 'Failed to update school'), 'error');
+    if (data.school) {
+      displayEnhancedSchoolModal({
+        school: data.school,
+        subjects: [],
+        ccas: [],
+        programmes: [],
+        distinctives: []
+      });
     }
   } catch (err) {
     console.error('Update school error:', err);
-    showToast('Error: ' + err.message, 'error');
+    showToast('Update failed: ' + err.message, 'error');
   }
 };
+
 
 // Delete Operation - Now uses modal
 window.deleteSchool = function (schoolId, schoolName) {
@@ -2043,38 +2192,98 @@ async function loadFullSchoolDetails(schoolId) {
 function displayEnhancedSchoolModal(data) {
   const { school, subjects, ccas, programmes, distinctives } = data;
 
+  // Remove any existing details modal first
+  const existing = document.getElementById('detailsModal');
+  if (existing) existing.remove();
+
+  const isAdmin = typeof isUserAdmin === 'function' && isUserAdmin();
+
   let html = `
-        <div class="modal active" id="detailsModal">
-            <div class="modal-overlay" onclick="closeDetailsModal()"></div>
-            <div class="modal-content" style="max-width: 1000px; max-height: 90vh; overflow-y: auto;">
-                <div class="modal-header">
-                    <h3>${school.school_name || 'School Details'}</h3>
-                    <button class="modal-close" onclick="closeDetailsModal()">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                        </svg>
-                    </button>
-                </div>
-                
-                <div class="detail-modal-content" style="padding: 1.5rem;">
-                    ${renderBasicInfo(school)}
-                    ${renderContactInfo(school)}
-                    ${renderPersonnel(school)}
-                    ${renderSpecialProgrammes(school)}
-                    ${renderMotherTongue(school)}
-                    ${renderTransport(school)}
-                    ${renderSubjectsList(subjects)}
-                    ${renderCCAsList(ccas)}
-                    ${renderProgrammesList(programmes)}
-                    ${renderDistinctivesList(distinctives)}
-                </div>
-            </div>
+    <div class="modal active" id="detailsModal">
+      <div class="modal-overlay" onclick="closeDetailsModal()"></div>
+      <div class="modal-content" style="max-width: 1000px; max-height: 90vh; overflow-y: auto;">
+        <div class="modal-header" style="align-items: center; gap: 0.75rem;">
+          <h3 style="flex: 1;">${school.school_name || 'School Details'}</h3>
+
+          ${isAdmin ? `
+          <div style="display: flex; gap: 0.5rem; margin-right: 0.5rem;">
+            <button 
+              type="button" 
+              class="btn-primary" 
+              style="display:flex; align-items:center; gap:0.35rem; padding:0.4rem 0.75rem; font-size:0.85rem;"
+              data-action="edit-school"
+            >
+              ✏️ Edit
+            </button>
+            <button 
+              type="button" 
+              class="btn-danger" 
+              style="display:flex; align-items:center; gap:0.35rem; padding:0.4rem 0.75rem; font-size:0.85rem;"
+              data-action="delete-school"
+            >
+              🗑 Delete
+            </button>
+          </div>
+          ` : ''}
+
+          <button class="modal-close" onclick="closeDetailsModal()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+          </button>
         </div>
-    `;
+        
+        <div class="detail-modal-content" style="padding: 1.5rem;">
+          ${renderBasicInfo(school)}
+          ${renderContactInfo(school)}
+          ${renderPersonnel(school)}
+          ${renderSpecialProgrammes(school)}
+          ${renderMotherTongue(school)}
+          ${renderTransport(school)}
+          ${renderSubjectsList(subjects)}
+          ${renderCCAsList(ccas)}
+          ${renderProgrammesList(programmes)}
+          ${renderDistinctivesList(distinctives)}
+        </div>
+      </div>
+    </div>
+  `;
 
   document.body.insertAdjacentHTML('beforeend', html);
   document.body.style.overflow = 'hidden';
+
+  // Wire up Edit/Delete buttons (admin only)
+  if (isAdmin) {
+    const modal = document.getElementById('detailsModal');
+    if (modal) {
+      const editBtn = modal.querySelector('[data-action="edit-school"]');
+      const deleteBtn = modal.querySelector('[data-action="delete-school"]');
+
+      if (editBtn) {
+        editBtn.addEventListener('click', () => {
+          // Close view card, then open edit modal
+          closeDetailsModal();
+          // Uses existing editSchool -> showEditModal flow
+          if (typeof editSchool === 'function') {
+            editSchool(school);
+          }
+        });
+      }
+
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', () => {
+          // Optionally close details modal first
+          closeDetailsModal();
+          if (typeof deleteSchool === 'function') {
+            deleteSchool(school.school_id, school.school_name || 'this school');
+          }
+        });
+      }
+    }
+  }
 }
+
+
 
 // ========== SCHOOL COMPARISON FUNCTIONS ==========
 // Comparison state
