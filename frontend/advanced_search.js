@@ -208,7 +208,10 @@ function displayAdvancedSearchResults(results, criteria) {
 
     // Make row clickable with school ID
     html += `
-            <tr class="clickable-row" onclick="viewItemDetails('schools', ${school.school_id})" style="cursor: pointer;">
+            <tr class="clickable-row" 
+                data-school-id="${school.school_id}"
+                onclick="viewItemDetails('schools', ${school.school_id})" 
+                style="cursor: pointer;">
                 <td><strong>${school.school_name || 'N/A'}</strong></td>
                 <td><span class="badge">${school.zone_code || 'N/A'}</span></td>
                 <td>${school.mainlevel_code || 'N/A'}</td>

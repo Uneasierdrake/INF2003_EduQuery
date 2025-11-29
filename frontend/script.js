@@ -1130,8 +1130,15 @@ function renderTable(data, queryType) {
   data.forEach(row => {
     if (queryType === 'all') {
       // Show all fields for school search
-      html += `<tr data-clickable="true" data-school-id="${row.school_id}" onclick="viewItemDetails('schools', ${row.school_id})" style="cursor: pointer">`;
-
+      const escapedSchoolName = (row.school_name || 'Unknown School').replace(/'/g, "\\'");
+      html += `<tr data-clickable="true" 
+              data-school-id="${row.school_id}" 
+              onclick="if (typeof comparisonMode !== 'undefined' && comparisonMode.active) { 
+                         handleComparisonClick(${row.school_id}, '${escapedSchoolName}'); 
+                       } else { 
+                         viewItemDetails('schools', ${row.school_id}); 
+                       }" 
+              style="cursor: pointer">`;
       const keys = Object.keys(data[0]);
 
       keys.forEach(k => {
@@ -2071,7 +2078,7 @@ window.startComparisonMode = function () {
   comparisonMode.school2 = null;
 
   showComparisonNotification();
-  // addComparisonClickListeners();
+  addComparisonClickListeners();
   showToast('Click on two schools to compare', 'info');
 };
 
@@ -2110,37 +2117,37 @@ function showComparisonNotification() {
   document.body.insertAdjacentHTML('beforeend', html);
 }
 
-// function addComparisonClickListeners() {
-//   // Add to all existing school rows
-//   document.querySelectorAll('.data-table tbody tr').forEach(row => {
-//     const schoolId = extractSchoolIdFromRow(row);
-//     if (schoolId) {
-//       row.style.cursor = 'pointer';
-//       row.classList.add('comparison-selectable');
-//       row.onclick = (e) => {
-//         // Don't trigger if clicking action buttons
-//         if (e.target.closest('button')) return;
-//         selectSchoolForComparison(row, schoolId);
-//       };
-//     }
-//   });
-//   // Add to clickable result items
-//   document.querySelectorAll('.result-item').forEach(item => {
-//     const schoolId = item.getAttribute('onclick')?.match(/viewItemDetails\("schools", (\d+)\)/)?.[1];
-//     if (schoolId) {
-//       item.classList.add('comparison-selectable');
-//       const originalOnclick = item.onclick;
-//       item.onclick = (e) => {
-//         if (comparisonMode.active) {
-//           e.stopPropagation();
-//           selectSchoolForComparison(item, schoolId);
-//         } else if (originalOnclick) {
-//           originalOnclick.call(item, e);
-//         }
-//       };
-//     }
-//   });
-// }
+function addComparisonClickListeners() {
+  // Add to all existing school rows
+  document.querySelectorAll('.data-table tbody tr').forEach(row => {
+    const schoolId = extractSchoolIdFromRow(row);
+    if (schoolId) {
+      row.style.cursor = 'pointer';
+      row.classList.add('comparison-selectable');
+      row.onclick = (e) => {
+        // Don't trigger if clicking action buttons
+        if (e.target.closest('button')) return;
+        selectSchoolForComparison(row, schoolId);
+      };
+    }
+  });
+  // Add to clickable result items
+  document.querySelectorAll('.result-item').forEach(item => {
+    const schoolId = item.getAttribute('onclick')?.match(/viewItemDetails\("schools", (\d+)\)/)?.[1];
+    if (schoolId) {
+      item.classList.add('comparison-selectable');
+      const originalOnclick = item.onclick;
+      item.onclick = (e) => {
+        if (comparisonMode.active) {
+          e.stopPropagation();
+          selectSchoolForComparison(item, schoolId);
+        } else if (originalOnclick) {
+          originalOnclick.call(item, e);
+        }
+      };
+    }
+  });
+}
 
 function extractSchoolIdFromRow(row) {
   // Try to find school_id from the first cell (school_id column)
@@ -2209,16 +2216,34 @@ function selectSchoolForComparison(element, schoolId) {
 }
 
 function extractSchoolName(element) {
-  // Try different methods to extract school name
+  // Try different methods to extract school name based on element type
+  
+  // Method 1: For table rows - look for school_name in the cells
+  if (element.tagName === 'TR') {
+    // Try to find the cell with school name (usually second cell after school_id)
+    const cells = element.querySelectorAll('td');
+    if (cells.length > 1) {
+      // Second cell typically contains school name
+      const schoolNameCell = cells[1];
+      if (schoolNameCell) {
+        return schoolNameCell.textContent.trim();
+      }
+    }
+  }
+  
+  // Method 2: Look for strong tag (used in many result displays)
   const strong = element.querySelector('strong');
   if (strong) return strong.textContent.trim();
 
+  // Method 3: Look for result-item-title class (universal search)
   const titleDiv = element.querySelector('.result-item-title');
   if (titleDiv) return titleDiv.textContent.trim();
 
+  // Method 4: First cell of table row
   const firstCell = element.querySelector('td:first-child');
   if (firstCell) return firstCell.textContent.trim();
 
+  // Fallback: return 'Unknown School'
   return 'Unknown School';
 }
 
@@ -2550,61 +2575,61 @@ window.showDistanceSearch = function () {
 
 // ========== USE CURRENT LOCATION ==========
 // Use My Location - Get postal code from browser location
-window.useCurrentLocation = function() {
+window.useCurrentLocation = function () {
   console.log('Getting current location...');
-  
+
   const btn = document.getElementById('useLocationBtn');
   const btnText = document.getElementById('locationBtnText') || btn;
   const postalInput = document.getElementById('distPostalCode');
-  
+
   if (!postalInput) {
     console.error('Postal code input not found');
     showToast('Error: Form elements not found', 'error');
     return;
   }
-  
+
   // Check if geolocation is supported
   if (!navigator.geolocation) {
     showToast('Geolocation is not supported by your browser', 'error');
     return;
   }
-  
+
   // Set loading state
   btn.disabled = true;
   btnText.textContent = 'Getting location...';
-  
+
   // Request location from browser - THIS WILL PROMPT USER
   navigator.geolocation.getCurrentPosition(
     // ========== SUCCESS CALLBACK ==========
-    async function(position) {
+    async function (position) {
       const latitude = position.coords.latitude;
       const longitude = position.coords.longitude;
-      
+
       console.log('Location detected:', { latitude, longitude });
-      
+
       // Update button text
       btnText.textContent = 'Finding postal code...';
-      
+
       try {
         // Call our backend API for reverse geocoding
         const response = await fetch(`/api/reverse-geocode?lat=${latitude}&lng=${longitude}`);
-        
+
         const result = await response.json();
-        
+
         console.log('Reverse geocode result:', result);
-        
+
         if (!result.success) {
           throw new Error(result.message || 'Failed to get postal code');
         }
-        
+
         // Fill the postal code input field
         postalInput.value = result.data.postalCode;
-        
+
         // Show success message
         const address = result.data.buildingName || result.data.address || 'Location';
         showToast(`Location found: ${address} (${result.data.postalCode})`, 'success');
         console.log('Postal code set:', result.data.postalCode);
-        
+
       } catch (error) {
         console.error('Geocoding error:', error);
         showToast(`Failed to get postal code: ${error.message}`, 'error');
@@ -2615,14 +2640,14 @@ window.useCurrentLocation = function() {
         btnText.textContent = 'Use My Location';
       }
     },
-    
+
     // ========== ERROR CALLBACK ==========
-    function(error) {
+    function (error) {
       console.error('Geolocation error:', error);
-      
+
       let errorMessage = '';
-      
-      switch(error.code) {
+
+      switch (error.code) {
         case error.PERMISSION_DENIED:
           errorMessage = 'Location access denied. Please enable location permissions in your browser settings.';
           break;
@@ -2635,17 +2660,17 @@ window.useCurrentLocation = function() {
         default:
           errorMessage = 'Unable to get your location. Please enter postal code manually.';
       }
-      
+
       showToast(errorMessage, 'error');
-      
+
       // Reset button state
       btn.disabled = false;
       btnText.textContent = 'Use My Location';
-      
+
       // Focus on input for manual entry
       postalInput.focus();
     },
-    
+
     // ========== GEOLOCATION OPTIONS ==========
     {
       enableHighAccuracy: true,  // Request high accuracy GPS
